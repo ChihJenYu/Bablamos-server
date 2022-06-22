@@ -1,5 +1,6 @@
 const db = require("../mysql");
 const Post = require("../../models/post");
+const Comment = require("../../models/comment");
 // AFFINITY
 const MESSAGE_WEIGHT = 4;
 const MENTION_WEIGHT = 3;
@@ -115,10 +116,6 @@ const refreshFeed = async (user_id) => {
                 where p.user_id in (select friend_userid from friendship where user_id = ?)`,
         [user_id]
     );
-    // const allFeedsPhotoUrls = allFeedsPhotoCount.map(post_id_photo_count => {
-    //     return {photo_url: }
-    // })
-
     const [allFeedsTags] = await db.pool.query(
         `select p.id as post_id, pt.tag_id, t.name as tag_name from post_tag pt
                 join post p on p.id = pt.post_id
@@ -175,7 +172,7 @@ const refreshFeed = async (user_id) => {
 };
 
 const getLatestComments = async (post_id, comment_count) => {
-    const [latestComments] = await db.pool.query(
+    let [latestComments] = await db.pool.query(
         `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, c.level, c.replied_comment_id, u.username, u.user_profile_pic 
         from comment c join user u on c.user_id = u.id
         where post_id = ? and level = 1 order by created_at asc limit ?`,

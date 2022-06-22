@@ -144,7 +144,7 @@ const getNewsfeed = async (req, res) => {
         // issue: localIndex could be negative
         const localIndexToStart = requestedStartIndex - NFGSStartIndex;
         const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
-        const newsfeedToReturn = userTempNewsfeedStorage[id].slice(
+        let newsfeedToReturn = userTempNewsfeedStorage[id].slice(
             localIndexToStart,
             localIndexToEnd + 1
         );
@@ -157,10 +157,31 @@ const getNewsfeed = async (req, res) => {
                 )}`
             );
             userTempNewsfeedStorage[id] = data.data;
-            const newsfeedToReturn = userTempNewsfeedStorage[id].slice(
+            let newsfeedToReturn = userTempNewsfeedStorage[id].slice(
                 0,
                 NEWSFEED_PER_PAGE_FOR_CLIENT
             );
+
+            // add author profile_pic_url and commentor
+            newsfeedToReturn = newsfeedToReturn.map((feed) => {
+                return {
+                    ...feed,
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: feed.user_profile_pic == 1,
+                        id: feed.user_id,
+                    }),
+                    latest_comments: feed.latest_comments.map((comment) => {
+                        return {
+                            ...comment,
+                            profile_pic_url: User.generatePictureUrl({
+                                has_profile: comment.user_profile_pic == 1,
+                                id: comment.user_id,
+                            }),
+                        };
+                    }),
+                };
+            });
+
             res.send({ data: newsfeedToReturn });
             redisClient.set(
                 "NFGS_start_index_for_temp_storage_user_" + id,
@@ -170,6 +191,26 @@ const getNewsfeed = async (req, res) => {
             );
             return;
         } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
+            // add author profile_pic_url and commentor
+            newsfeedToReturn = newsfeedToReturn.map((feed) => {
+                return {
+                    ...feed,
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: feed.user_profile_pic == 1,
+                        id: feed.user_id,
+                    }),
+                    latest_comments: feed.latest_comments.map((comment) => {
+                        return {
+                            ...comment,
+                            profile_pic_url: User.generatePictureUrl({
+                                has_profile: comment.user_profile_pic == 1,
+                                id: comment.user_id,
+                            }),
+                        };
+                    }),
+                };
+            });
+
             res.send({ data: newsfeedToReturn });
             return;
         } else {
@@ -187,6 +228,27 @@ const getNewsfeed = async (req, res) => {
             newsfeedToReturn = newsfeedToReturn.concat(
                 userTempNewsfeedStorage[id].slice(0, newsfeedRequiredFromNFGS)
             );
+
+            // add author profile_pic_url and commentor
+            newsfeedToReturn = newsfeedToReturn.map((feed) => {
+                return {
+                    ...feed,
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: feed.user_profile_pic == 1,
+                        id: feed.user_id,
+                    }),
+                    latest_comments: feed.latest_comments.map((comment) => {
+                        return {
+                            ...comment,
+                            profile_pic_url: User.generatePictureUrl({
+                                has_profile: comment.user_profile_pic == 1,
+                                id: comment.user_id,
+                            }),
+                        };
+                    }),
+                };
+            });
+
             res.send({ data: newsfeedToReturn });
             redisClient.set(
                 "NFGS_start_index_for_temp_storage_user_" + id,
@@ -197,8 +259,27 @@ const getNewsfeed = async (req, res) => {
             return;
         }
     } else if (whichPage === "profile") {
-        const profileFeeds = await Feed.find({ user_id: id, paging });
-        res.send({ data: profileFeeds });
+        // add author profile_pic_url and commentor
+        let newsfeedToReturn = await Feed.find({ user_id: id, paging });
+        newsfeedToReturn = newsfeedToReturn.map((feed) => {
+            return {
+                ...feed,
+                profile_pic_url: User.generatePictureUrl({
+                    has_profile: feed.user_profile_pic == 1,
+                    id: feed.user_id,
+                }),
+                latest_comments: feed.latest_comments.map((comment) => {
+                    return {
+                        ...comment,
+                        profile_pic_url: User.generatePictureUrl({
+                            has_profile: comment.user_profile_pic == 1,
+                            id: comment.user_id,
+                        }),
+                    };
+                }),
+            };
+        });
+        res.send({ data: newsfeedToReturn });
     }
 };
 
@@ -223,8 +304,17 @@ const getUserInfo = async (req, res) => {
             0
         );
         const profile_pic_url = req.user.profile_pic_url;
-        const { user_info, friend_count } = await User.getUserInfo(id);
-        res.send({ user_info, profile_pic_url, friend_count, recent_friends });
+        const { user_info, username, friend_count } = await User.getUserInfo(
+            id
+        );
+        res.send({
+            user_id: id,
+            user_info,
+            username,
+            profile_pic_url,
+            friend_count,
+            recent_friends,
+        });
     }
 };
 

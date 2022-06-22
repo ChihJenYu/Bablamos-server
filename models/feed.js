@@ -9,6 +9,7 @@ class Feed extends Post {
         content, // required
         created_at, // required
         audience_type_id, // required
+        audience,
         shared_post_id,
         like_count,
         comment_count,
@@ -36,8 +37,12 @@ class Feed extends Post {
         this.share_count = share_count || 0;
         this.latest_comments = latest_comments || [];
     }
+    // ugly method
     static async find({ user_id, paging }) {
-        const [allFeeds] = await db.pool.query(
+        const feedMentionedUsersTable = {};
+        const feedPhotoCountTable = {};
+        const feedTagsTable = {};
+        let [allFeeds] = await db.pool.query(
             `select lc.id, lc.user_id, u.username, u.user_profile_pic, lc.content, unix_timestamp(lc.created_at) as created_at, lc.audience_type_id, lc.shared_post_id, lc.like_count, cc.comment_count, sc.share_count
                 from 
                 (
@@ -91,8 +96,93 @@ class Feed extends Post {
                 PERSONAL_FEEDS_DEFAULT_PAGE_SIZE,
             ]
         );
-        return allFeeds;
+        const fetchedPostIds = allFeeds.map((feed) => {
+            return feed.id;
+        });
+        const [allFeedsMentionedUsers] = await db.pool.query(
+            `select mu.post_id as post_id, mu.user_id as mentioned_user_id, u.username, u.user_profile_pic
+                from mention_user mu
+                join post p
+                on mu.post_id = p.id
+                join user u
+                on u.id = mu.user_id
+                where p.user_id = ?
+                and mu.post_id in (?)`,
+            [user_id, fetchedPostIds]
+        );
+        const [allFeedsPhotoCount] = await db.pool.query(
+            `select p.id as post_id, p.photo_count from post p
+                where p.user_id = ? and p.id in (?)`,
+            [user_id, fetchedPostIds]
+        );
+        const [allFeedsTags] = await db.pool.query(
+            `select p.id as post_id, pt.tag_id, t.name as tag_name from post_tag pt
+                join post p on p.id = pt.post_id
+                join tag t on t.id = pt.tag_id
+                where p.user_id = ? and p.id in (?)
+                `,
+            [user_id, fetchedPostIds]
+        );
+
+        allFeedsMentionedUsers.forEach((mentionedUser) => {
+            if (!feedMentionedUsersTable[mentionedUser.post_id]) {
+                feedMentionedUsersTable[mentionedUser.post_id] = [
+                    {
+                        user_id: mentionedUser.mentioned_user_id,
+                        username: mentionedUser.username,
+                        user_profile_pic: mentionedUser.user_profile_pic,
+                    },
+                ];
+            } else {
+                feedMentionedUsersTable[mentionedUser.post_id].push({
+                    user_id: mentionedUser.mentioned_user_id,
+                    username: mentionedUser.username,
+                    user_profile_pic: mentionedUser.user_profile_pic,
+                });
+            }
+        });
+        allFeedsPhotoCount.forEach((feedPhoto) => {
+            feedPhotoCountTable[feedPhoto.post_id] = feedPhoto.photo_count;
+        });
+        allFeedsTags.forEach((feedTag) => {
+            if (!feedTagsTable[feedTag.post_id]) {
+                feedTagsTable[feedTag.post_id] = [
+                    {
+                        id: feedTag.tag_id,
+                        tag_name: feedTag.tag_name,
+                    },
+                ];
+            } else {
+                feedTagsTable[feedTag.post_id].push({
+                    id: feedTag.tag_id,
+                    tag_name: feedTag.tag_name,
+                });
+            }
+        });
+
+        let newsfeedToReturn = [];
+        for (let feedItem of allFeeds) {
+            const feed = new Feed(feedItem);
+            const latestComments = await Feed.getLatestComments(feed.id, 10);
+            feed.latest_comments = latestComments || [];
+            feed.mentioned_users = feedMentionedUsersTable[feed.id] || [];
+            feed.photo_count = feedPhotoCountTable[feed.id] || 0;
+            feed.tags = feedTagsTable[feed.id] || [];
+            newsfeedToReturn.push(feed);
+        }
+
+        return newsfeedToReturn;
+    }
+
+    static async getLatestComments(post_id, comment_count) {
+        let [latestComments] = await db.pool.query(
+            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, c.level, c.replied_comment_id, u.username, u.user_profile_pic 
+        from comment c join user u on c.user_id = u.id
+        where post_id = ? and level = 1 order by created_at asc limit ?`,
+            [post_id, comment_count]
+        );
+        return latestComments;
     }
 }
 
-module.exports = Feed
+module.exports = Feed;

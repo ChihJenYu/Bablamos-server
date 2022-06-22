@@ -26,8 +26,8 @@ class User {
         this.info = info || null;
     }
 
-    static generatePictureUrl(id) {
-        return id
+    static generatePictureUrl({ has_profile, id }) {
+        return has_profile
             ? CLOUDFRONT_DOMAIN_NAME + `/user/${id}/profile.jpg`
             : CLOUDFRONT_DOMAIN_NAME + `/user/default.jpg`;
     }
@@ -92,10 +92,10 @@ class User {
                     id,
                     username,
                     email,
-                    profile_pic_url:
-                        user_profile_pic == 1
-                            ? User.generatePictureUrl(id)
-                            : User.generatePictureUrl(),
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: user_profile_pic == 1,
+                        id,
+                    }),
                     allow_stranger_follow,
                 },
                 process.env.JWT_SECRET_KEY,
@@ -120,9 +120,10 @@ class User {
                     id,
                     username: this.username,
                     email: this.email,
-                    profile_pic_url: this.include_profile_pic
-                        ? User.generatePictureUrl(id)
-                        : User.generatePictureUrl(),
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: this.include_profile_pic == 1,
+                        id,
+                    }),
                     allow_stranger_follow: this.allow_stranger_follow,
                 },
                 process.env.JWT_SECRET_KEY,
@@ -218,19 +219,22 @@ class User {
                     : DEFAULT_FRIENDS_PAGE_SIZE,
             ]
         );
-        result = result.map(friend => {return {
-            ...friend,
-            profile_pic_url: friend.user_profile_pic == 1
-                ? User.generatePictureUrl(friend.id)
-                : User.generatePictureUrl(),
-        };})
+        result = result.map((friend) => {
+            return {
+                ...friend,
+                profile_pic_url: User.generatePictureUrl({
+                    has_profile: friend.user_profile_pic == 1,
+                    id: friend.id,
+                }),
+            };
+        });
         return result;
     }
 
     // user info and friend count
     static async getUserInfo(id) {
         const [result] = await db.pool.query(
-            `select u.info as user_info, count(f.friend_userid) as friend_count
+            `select u.info as user_info, u.username, count(f.friend_userid) as friend_count
                 from user u join friendship f on u.id = f.user_id
                 where u.id = ?
                 group by u.id`,

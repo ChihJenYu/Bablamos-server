@@ -22,7 +22,7 @@ const initialization = async () => {
 
             console.log(`Querying user id ${id.id}'s news feed items...`);
 
-            const {
+            let {
                 allFeeds,
                 feedMentionedUsersTable,
                 feedPhotoCountTable,
