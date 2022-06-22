@@ -3,7 +3,7 @@ class Feed {
         id, // required
         user_id, // required
         username, // required
-        profile_pic_url, // required
+        user_profile_pic, // required
         content, // required
         created_at, // required
         audience_type_id, // required
@@ -14,13 +14,13 @@ class Feed {
         edge_rank_score,
         latest_comments,
         mentioned_users,
-        photo_urls,
+        photo_count,
         tags,
     }) {
         this.id = id;
         this.user_id = user_id;
         this.username = username;
-        this.profile_pic_url = profile_pic_url;
+        this.user_profile_pic = user_profile_pic;
         this.content = content;
         this.created_at = created_at;
         this.audience_type_id = audience_type_id;
@@ -31,7 +31,7 @@ class Feed {
         this.edge_rank_score = edge_rank_score || 0;
         this.latest_comments = latest_comments || [];
         this.mentioned_users = mentioned_users || [];
-        this.photo_urls = photo_urls || [];
+        this.photo_count = photo_count || 0;
         this.tags = tags || [];
     }
 }

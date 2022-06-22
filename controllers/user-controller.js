@@ -54,7 +54,10 @@ const regularSignin = async (type, userData) => {
             id,
             username,
             email,
-            profile_pic_url,
+            profile_pic_url:
+                user_profile_pic == 1
+                    ? User.generatePictureUrl(id)
+                    : User.generatePictureUrl(),
             // allow_stranger_follow?
         },
     };
@@ -103,6 +106,7 @@ const userSignIn = async (req, res) => {
         res.status(200).send(responseBody);
         return;
     } catch (e) {
+        console.log(e);
         res.status(400).send({ error: e.message });
         return;
     }

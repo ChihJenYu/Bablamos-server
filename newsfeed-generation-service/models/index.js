@@ -1,4 +1,5 @@
 const db = require("../mysql");
+const Post = require("../../models/post");
 // AFFINITY
 const MESSAGE_WEIGHT = 4;
 const MENTION_WEIGHT = 3;
@@ -47,11 +48,11 @@ const getUserIds = async (arg) => {
 // refetch a user's entire news feed without ordering by edge rank score
 const refreshFeed = async (user_id) => {
     const feedMentionedUsersTable = {};
-    const feedPhotoUrlsTable = {};
+    const feedPhotoCountTable = {};
     const feedTagsTable = {};
 
     const [allFeeds] = await db.pool.query(
-        `select lc.id, lc.user_id, u.username, u.profile_pic_url, lc.content, unix_timestamp(lc.created_at) as created_at, lc.audience_type_id, lc.shared_post_id, lc.like_count, cc.comment_count, sc.share_count
+        `select lc.id, lc.user_id, u.user_profile_pic, u.username, lc.content, unix_timestamp(lc.created_at) as created_at, lc.audience_type_id, lc.shared_post_id, lc.like_count, cc.comment_count, sc.share_count
                 from 
                 (
                 select 
@@ -99,7 +100,7 @@ const refreshFeed = async (user_id) => {
         [user_id, user_id, user_id]
     );
     const [allFeedsMentionedUsers] = await db.pool.query(
-        `select mu.post_id as post_id, mu.user_id as mentioned_user_id, u.username, u.profile_pic_url
+        `select mu.post_id as post_id, mu.user_id as mentioned_user_id, u.username, u.user_profile_pic
                 from mention_user mu
                 join post p
                 on mu.post_id = p.id
@@ -109,13 +110,15 @@ const refreshFeed = async (user_id) => {
                 `,
         [user_id]
     );
-    const [allFeedsPhotoUrls] = await db.pool.query(
-        `select p.id as post_id, ph.id, ph.photo_url from edge_photo ph
-                join post p on p.id = ph.post_id
-                where p.user_id in (select friend_userid from friendship where user_id = ?)
-                `,
+    const [allFeedsPhotoCount] = await db.pool.query(
+        `select p.id as post_id, p.photo_count from post p
+                where p.user_id in (select friend_userid from friendship where user_id = ?)`,
         [user_id]
     );
+    // const allFeedsPhotoUrls = allFeedsPhotoCount.map(post_id_photo_count => {
+    //     return {photo_url: }
+    // })
+
     const [allFeedsTags] = await db.pool.query(
         `select p.id as post_id, pt.tag_id, t.name as tag_name from post_tag pt
                 join post p on p.id = pt.post_id
@@ -133,31 +136,19 @@ const refreshFeed = async (user_id) => {
                 {
                     user_id: mentionedUser.mentioned_user_id,
                     username: mentionedUser.username,
-                    profile_pic_url: mentionedUser.profile_pic_url,
+                    user_profile_pic: mentionedUser.user_profile_pic,
                 },
             ];
         } else {
             feedMentionedUsersTable[mentionedUser.post_id].push({
                 user_id: mentionedUser.mentioned_user_id,
                 username: mentionedUser.username,
-                profile_pic_url: mentionedUser.profile_pic_url,
+                user_profile_pic: mentionedUser.user_profile_pic,
             });
         }
     });
-    allFeedsPhotoUrls.forEach((feedPhoto) => {
-        if (!feedPhotoUrlsTable[feedPhoto.post_id]) {
-            feedPhotoUrlsTable[feedPhoto.post_id] = [
-                {
-                    photo_url: feedPhoto.photo_url,
-                    id: feedPhoto.id,
-                },
-            ];
-        } else {
-            feedPhotoUrlsTable[feedPhoto.post_id].push({
-                photo_url: feedPhoto.photo_url,
-                id: feedPhoto.id,
-            });
-        }
+    allFeedsPhotoCount.forEach((feedPhoto) => {
+        feedPhotoCountTable[feedPhoto.post_id] = feedPhoto.photo_count;
     });
     allFeedsTags.forEach((feedTag) => {
         if (!feedTagsTable[feedTag.post_id]) {
@@ -178,14 +169,14 @@ const refreshFeed = async (user_id) => {
     return {
         allFeeds,
         feedMentionedUsersTable,
-        feedPhotoUrlsTable,
+        feedPhotoCountTable,
         feedTagsTable,
     };
 };
 
 const getLatestComments = async (post_id, comment_count) => {
     const [latestComments] = await db.pool.query(
-        `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, c.level, c.replied_comment_id, u.username, u.profile_pic_url 
+        `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, c.level, c.replied_comment_id, u.username, u.user_profile_pic 
         from comment c join user u on c.user_id = u.id
         where post_id = ? and level = 1 order by created_at asc limit ?`,
         [post_id, comment_count]

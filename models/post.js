@@ -11,7 +11,7 @@ class Post extends Edge {
         shared_post_id, // optional
         tags, // array
         mentioned_users, // array; optional,
-        photo_urls, // array; optional
+        photo_count, // default 0
         created_at, // optional
     }) {
         super({
@@ -20,13 +20,29 @@ class Post extends Edge {
             user_id,
             content,
             mentioned_users,
-            photo_urls,
+            photo_count,
             created_at,
         });
         this.audience_type_id = audience_type_id;
         this.audience = audience || [];
         this.shared_post_id = shared_post_id || null;
         this.tags = tags || [];
+    }
+
+    generatePhotoUrls() {
+        let photoUrls = [];
+        for (let i = 0; i < this.photo_count; i++) {
+            photoUrls.push(`/user-media/${this.id}/${i}.jpg`);
+        }
+        return photoUrls;
+    }
+
+    static staticGeneratePhotoUrls(id, photo_count) {
+        let photoUrls = [];
+        for (let i = 0; i < photo_count; i++) {
+            photoUrls.push(`/user-media/${id}/${i}.jpg`);
+        }
+        return photoUrls;
     }
 
     static async delete(id) {
@@ -45,9 +61,6 @@ class Post extends Edge {
                 const postAudienceArray = this.audience.map((user_id) => {
                     return [this.id, user_id];
                 });
-                const postPhotosArray = this.photo_urls.map((photo_url) => {
-                    return [this.id, photo_url];
-                });
                 const postMentionsArray = this.mentioned_users.map(
                     (user_id) => {
                         return [this.id, user_id];
@@ -56,12 +69,13 @@ class Post extends Edge {
 
                 // is update
                 await conn.query(
-                    `UPDATE post SET content = ?, audience_type_id = ?, shared_post_id = ? WHERE  id = ?`,
+                    `UPDATE post SET content = ?, audience_type_id = ?, shared_post_id = ?, photo_count = ? WHERE id = ?`,
                     [
                         this.content,
                         this.audience_type_id,
                         this.shared_post_id,
                         this.id,
+                        this.photo_count,
                     ]
                 );
                 // update post_tag
@@ -78,13 +92,6 @@ class Post extends Edge {
                         [this.id, postAudienceArray]
                     );
                 }
-                // update post_photo table
-                if (postPhotosArray.length > 0) {
-                    await conn.query(
-                        "DELETE FROM edge_photo WHERE post_id = ?; INSERT INTO edge_photo (post_id, photo_url) VALUES ?",
-                        [this.id, postPhotosArray]
-                    );
-                }
                 // update mention_user table
                 if (postMentionsArray.length > 0) {
                     await conn.query(
@@ -96,13 +103,14 @@ class Post extends Edge {
                 // is insert
                 const [{ insertId: post_id }] = await conn.query(
                     `INSERT INTO post
-                (user_id, content, audience_type_id, shared_post_id)
-                VALUES (?, ?, ?, ?)`,
+                (user_id, content, audience_type_id, shared_post_id, photo_count)
+                VALUES (?, ?, ?, ?, ?)`,
                     [
                         this.user_id,
                         this.content,
                         this.audience_type_id,
                         this.shared_post_id,
+                        this.photo_count,
                     ]
                 );
                 const [newPostPacket] = await conn.query(
@@ -120,9 +128,6 @@ class Post extends Edge {
                 });
                 const postAudienceArray = this.audience.map((user_id) => {
                     return [this.id, user_id];
-                });
-                const postPhotosArray = this.photo_urls.map((photo_url) => {
-                    return [this.id, photo_url];
                 });
                 const postMentionsArray = this.mentioned_users.map(
                     (user_id) => {
@@ -142,13 +147,6 @@ class Post extends Edge {
                     await conn.query(
                         "INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
                         [postAudienceArray]
-                    );
-                }
-                // insert into post_photo table
-                if (postPhotosArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO edge_photo (post_id, photo_url) VALUES ?",
-                        [postPhotosArray]
                     );
                 }
                 // insert into mention_user table

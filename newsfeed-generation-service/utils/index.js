@@ -25,7 +25,7 @@ const initialization = async () => {
             const {
                 allFeeds,
                 feedMentionedUsersTable,
-                feedPhotoUrlsTable,
+                feedPhotoCountTable,
                 feedTagsTable,
             } = await refreshFeed(id.id);
 
@@ -58,7 +58,7 @@ const initialization = async () => {
                 // add latest comments, photo_urls and mentioned_users to feedItem
                 feed.latest_comments = latestComments || [];
                 feed.mentioned_users = feedMentionedUsersTable[feed.id] || [];
-                feed.photo_urls = feedPhotoUrlsTable[feed.id] || [];
+                feed.photo_count = feedPhotoCountTable[feed.id] || 0;
                 feed.tags = feedTagsTable[feed.id] || [];
 
                 // enqueue feedItem to newsfeedBulkTable[id.id]

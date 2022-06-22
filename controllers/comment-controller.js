@@ -7,14 +7,16 @@ const createComment = async (req, res) => {
     // {
     //     content: "lorem ipsum",
     //     level: 1,
-    //     replied_comment_id: undefined
-    //     mentioned_users: [1, 2, 3]
+    //     replied_comment_id: undefined,
+    //     mentioned_users: [1, 2, 3],
     // }
+    const photo_count = req.files.length;
     const commentData = req.body;
     const newComment = new Comment({
         ...commentData,
         post_id,
         user_id,
+        photo_count,
     });
     await newComment.save();
     res.status(201).send({
@@ -22,19 +24,21 @@ const createComment = async (req, res) => {
         user_id,
         username: req.user.username,
         profile_pic_url: req.user.profile_pic_url,
+        photo_count: newComment.photo_count,
         created_at: newComment.created_at,
     });
 };
 
 const editComment = async (req, res) => {
+    const photo_count = req.files.length;
     const comment_id = req.comment_id;
     const user_id = req.user.id;
     // request query: comment-id
     // request body:
     // {
     //     content: "lorem ipsum",
-    //     created_at
-    //     mentioned_users: [1, 2, 3]
+    //     created_at,
+    //     mentioned_users: [1, 2, 3],
     // }
     const commentData = req.body;
 
@@ -42,6 +46,7 @@ const editComment = async (req, res) => {
         ...commentData,
         user_id,
         id: comment_id,
+        photo_count,
     });
     await newComment.save();
 
@@ -50,6 +55,7 @@ const editComment = async (req, res) => {
         user_id,
         username: req.user.username,
         profile_pic_url: req.user.profile_pic_url,
+        photo_count: newComment.photo_count,
         created_at: newComment.created_at,
     });
 };

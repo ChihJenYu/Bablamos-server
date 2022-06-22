@@ -14,7 +14,7 @@ class Edge {
         user_id,
         content,
         mentioned_users,
-        photo_urls,
+        photo_count,
         created_at,
     }) {
         this.id = id || null;
@@ -22,7 +22,7 @@ class Edge {
         this.user_id = user_id; // required
         this.content = content; // required
         this.mentioned_users = mentioned_users || [];
-        this.photo_urls = photo_urls || [];
+        this.photo_count = photo_count || 0;
         this.created_at = created_at || null;
     }
 }

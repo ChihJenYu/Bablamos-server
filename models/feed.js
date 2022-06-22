@@ -6,7 +6,6 @@ class Feed extends Post {
         id, // required
         user_id, // required
         username, // required
-        profile_pic_url, // required
         content, // required
         created_at, // required
         audience_type_id, // required
@@ -16,7 +15,7 @@ class Feed extends Post {
         share_count,
         latest_comments,
         mentioned_users,
-        photo_urls,
+        photo_count,
         tags,
     }) {
         super({
@@ -28,11 +27,10 @@ class Feed extends Post {
             shared_post_id, // optional
             tags, // array
             mentioned_users, // array; optional,
-            photo_urls, // array; optional
+            photo_count, // array; optional
             created_at, // optional
         });
         this.username = username;
-        this.profile_pic_url = profile_pic_url;
         this.like_count = like_count || 0;
         this.comment_count = comment_count || 0;
         this.share_count = share_count || 0;
@@ -40,7 +38,7 @@ class Feed extends Post {
     }
     static async find({ user_id, paging }) {
         const [allFeeds] = await db.pool.query(
-            `select lc.id, lc.user_id, u.username, u.profile_pic_url, lc.content, unix_timestamp(lc.created_at) as created_at, lc.audience_type_id, lc.shared_post_id, lc.like_count, cc.comment_count, sc.share_count
+            `select lc.id, lc.user_id, u.username, u.user_profile_pic, lc.content, unix_timestamp(lc.created_at) as created_at, lc.audience_type_id, lc.shared_post_id, lc.like_count, cc.comment_count, sc.share_count
                 from 
                 (
                 select 

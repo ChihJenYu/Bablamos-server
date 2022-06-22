@@ -28,8 +28,8 @@ class User {
 
     static generatePictureUrl(id) {
         return id
-            ? CLOUDFRONT_DOMAIN_NAME + `/${id}/profile.jpg`
-            : CLOUDFRONT_DOMAIN_NAME + `/default.jpg`;
+            ? CLOUDFRONT_DOMAIN_NAME + `/user/${id}/profile.jpg`
+            : CLOUDFRONT_DOMAIN_NAME + `/user/default.jpg`;
     }
 
     // return the user packets
@@ -94,8 +94,8 @@ class User {
                     email,
                     profile_pic_url:
                         user_profile_pic == 1
-                            ? CLOUDFRONT_DOMAIN_NAME + `/${id}/profile.jpg`
-                            : CLOUDFRONT_DOMAIN_NAME + `/default.jpg`,
+                            ? User.generatePictureUrl(id)
+                            : User.generatePictureUrl(),
                     allow_stranger_follow,
                 },
                 process.env.JWT_SECRET_KEY,
@@ -105,6 +105,7 @@ class User {
             );
             return { token, expire: JWT_EXPIRE };
         } catch (e) {
+            console.log(e);
             throw new Error("Could not generate token");
         }
     }
@@ -120,8 +121,8 @@ class User {
                     username: this.username,
                     email: this.email,
                     profile_pic_url: this.include_profile_pic
-                        ? CLOUDFRONT_DOMAIN_NAME + `/${id}/profile.jpg`
-                        : CLOUDFRONT_DOMAIN_NAME + `/default.jpg`,
+                        ? User.generatePictureUrl(id)
+                        : User.generatePictureUrl(),
                     allow_stranger_follow: this.allow_stranger_follow,
                 },
                 process.env.JWT_SECRET_KEY,
@@ -204,7 +205,7 @@ class User {
         }
         const { whereClause, args } = db.translateFilter(filter);
         const [result] = await db.pool.query(
-            `SELECT f.friend_userid as id, u.username as friend_name, u.profile_pic_url, u.allow_stranger_follow FROM friendship f
+            `SELECT f.friend_userid as id, u.username as friend_name, u.user_profile_pic, u.allow_stranger_follow FROM friendship f
             JOIN user u on f.friend_userid = u.id
             ${whereClause} ${at_profile ? "ORDER BY id DESC" : ""} LIMIT ?, ?`,
             [

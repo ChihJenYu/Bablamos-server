@@ -10,7 +10,7 @@ class Comment extends Edge {
         level, // 1 if not specified
         replied_comment_id, // optional
         mentioned_users, // array; optional,
-        photo_urls, // array; optional
+        photo_count, // default 0
         created_at, // optional
     }) {
         super({
@@ -19,12 +19,22 @@ class Comment extends Edge {
             user_id,
             content,
             mentioned_users,
-            photo_urls,
+            photo_count,
             created_at,
         });
         this.post_id = post_id;
         this.level = level || 1;
         this.replied_comment_id = replied_comment_id || null;
+    }
+
+    generatePhotoUrls() {
+        let photoUrls = [];
+        for (let i = 0; i < this.photo_count; i++) {
+            photoUrls.push(
+                `/user-media/${this.post_id}/add/${this.id}/${i}.jpg`
+            );
+        }
+        return photoUrls;
     }
 
     static async delete(id) {
@@ -44,9 +54,9 @@ class Comment extends Edge {
                     }
                 );
                 await conn.query(
-                    `UPDATE comment SET content = ?
+                    `UPDATE comment SET content = ? AND photo_count = ?
                 WHERE id = ?`,
-                    [this.content, this.id]
+                    [this.content, this.photo_count, this.id]
                 );
 
                 await conn.query(
@@ -58,12 +68,13 @@ class Comment extends Edge {
             } else {
                 const [{ insertId: comment_id }] = await conn.query(
                     `INSERT INTO comment
-            (post_id, user_id, content, level, replied_comment_id)
+            (post_id, user_id, content, photo_count, level, replied_comment_id)
             VALUES (?, ?, ?, ?, ?)`,
                     [
                         this.post_id,
                         this.user_id,
                         this.content,
+                        this.photo_count,
                         this.level,
                         this.replied_comment_id,
                     ]

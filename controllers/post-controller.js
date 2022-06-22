@@ -9,11 +9,12 @@ const createPost = async (req, res) => {
     //     shared_post_id: undefined,
     //     tags: [{tag_id: 1, tag_name: 'nodejs'}],
     //     mentioned_users: undefined,
-    //     photo_urls: undefined
+    //     photo_count: number
     // }
+    const photo_count = req.files.length;
     const { id: user_id, profile_pic_url, username } = req.user;
     const postData = req.body;
-    const newPost = new Post({ ...postData, user_id });
+    const newPost = new Post({ ...postData, user_id, photo_count });
 
     // save the new post to db
     // const [newPostPacket] = await newPost.save();
@@ -37,9 +38,7 @@ const createPost = async (req, res) => {
     });
 };
 
-const getPostDetail = async (req, res) => {
-    
-}
+const getPostDetail = async (req, res) => {};
 
 const editPost = async (req, res) => {
     // request query: post-id
@@ -51,12 +50,17 @@ const editPost = async (req, res) => {
     //     shared_post_id: undefined,
     //     tags: [{tag_id: 1, tag_name: 'nodejs'}],
     //     mentioned_users: undefined,
-    //     photo_urls: undefined
     // }
+    const photo_count = req.files.length;
     const post_id = req.post_id;
     const { id: user_id } = req.user;
     const postData = req.body;
-    const newPost = new Post({ ...postData, user_id, id: +post_id });
+    const newPost = new Post({
+        ...postData,
+        user_id,
+        id: +post_id,
+        photo_count,
+    });
 
     // update the post
     await newPost.save();
