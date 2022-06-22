@@ -204,7 +204,7 @@ class User {
             throw new Error("Missing user_id");
         }
         const { whereClause, args } = db.translateFilter(filter);
-        const [result] = await db.pool.query(
+        let [result] = await db.pool.query(
             `SELECT f.friend_userid as id, u.username as friend_name, u.user_profile_pic, u.allow_stranger_follow FROM friendship f
             JOIN user u on f.friend_userid = u.id
             ${whereClause} ${at_profile ? "ORDER BY id DESC" : ""} LIMIT ?, ?`,
@@ -218,6 +218,12 @@ class User {
                     : DEFAULT_FRIENDS_PAGE_SIZE,
             ]
         );
+        result = result.map(friend => {return {
+            ...friend,
+            profile_pic_url: friend.user_profile_pic == 1
+                ? User.generatePictureUrl(friend.id)
+                : User.generatePictureUrl(),
+        };})
         return result;
     }
 
