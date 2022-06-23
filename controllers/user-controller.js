@@ -54,10 +54,10 @@ const regularSignin = async (type, userData) => {
             id,
             username,
             email,
-            profile_pic_url:
-                user_profile_pic == 1
-                    ? User.generatePictureUrl(id)
-                    : User.generatePictureUrl(),
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: user_profile_pic == 1,
+                id,
+            }),
             // allow_stranger_follow?
         },
     };

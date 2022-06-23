@@ -99,6 +99,9 @@ class Feed extends Post {
         const fetchedPostIds = allFeeds.map((feed) => {
             return feed.id;
         });
+        if (fetchedPostIds.length === 0) {
+            return [];
+        }
         const [allFeedsMentionedUsers] = await db.pool.query(
             `select mu.post_id as post_id, mu.user_id as mentioned_user_id, u.username, u.user_profile_pic
                 from mention_user mu
