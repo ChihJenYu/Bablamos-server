@@ -9,7 +9,7 @@ const pool = mysql.createPool({
 
 // cols is an array of columns to be returned
 const translateCols = (cols) => {
-    if (cols.length == 0 || !cols) {
+    if (!cols || cols.length == 0) {
         return "*"
     }
     let stringifiedCols = "";

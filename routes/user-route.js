@@ -39,7 +39,7 @@ router
 
 router
     .route("/user/friend")
-    .get(asyncErrorHandler(getUserFriends)) // id, status, paging
+    .get([authentication, asyncErrorHandler(getUserFriends)]) // id, status, paging
     .post([authentication, asyncErrorHandler(userBefriends)]) // action, user-id
     .delete([authentication, asyncErrorHandler(userUnfriends)]); // user-id
 

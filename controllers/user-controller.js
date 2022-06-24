@@ -76,12 +76,14 @@ const userSignUp = async (req, res) => {
             await s3
                 .upload({
                     Bucket: process.env.AWS_S3_BUCKET_NAME,
-                    Key: `${newUserId}/profile.jpg`,
+                    Key: `user/${newUserId}/profile.jpg`,
                     Body: req.file.buffer,
                 })
                 .promise();
-            responseBody.user.profile_pic_url =
-                User.generatePictureUrl(newUserId);
+            responseBody.user.profile_pic_url = User.generatePictureUrl({
+                has_profile: true,
+                id: newUserId,
+            });
             res.status(201).send(responseBody);
         } else {
             // no profile picture
@@ -112,19 +114,20 @@ const userSignIn = async (req, res) => {
     }
 };
 
-// /user/newsfeed?at=index&paging=0
+// /user/newsfeed?at=index&paging=0&username= (username query is required if at == profile)
 // returns an array of parsed Feed objects
 const getNewsfeed = async (req, res) => {
     const whichPage = req.query.at;
     const paging = req.query.paging || 0;
-    const id = req.user.id;
+    const userAsking = req.user.id;
+    const userInQuestion = req.query.id;
 
     if (whichPage === "index") {
         // initialization
-        if (!userTempNewsfeedStorage[id]) {
-            userTempNewsfeedStorage[id] = [];
+        if (!userTempNewsfeedStorage[userAsking]) {
+            userTempNewsfeedStorage[userAsking] = [];
             await redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + id,
+                "NFGS_start_index_for_temp_storage_user_" + userAsking,
                 0
             );
         }
@@ -136,7 +139,7 @@ const getNewsfeed = async (req, res) => {
             1;
 
         let NFGSStartIndex = await redisClient.get(
-            "NFGS_start_index_for_temp_storage_user_" + id
+            "NFGS_start_index_for_temp_storage_user_" + userAsking
         );
         NFGSStartIndex = +NFGSStartIndex;
         NFGSEndIndex = NFGSStartIndex + NEWSFEED_PER_PAGE_FOR_WEB_SERVER - 1;
@@ -144,7 +147,7 @@ const getNewsfeed = async (req, res) => {
         // issue: localIndex could be negative
         const localIndexToStart = requestedStartIndex - NFGSStartIndex;
         const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
-        let newsfeedToReturn = userTempNewsfeedStorage[id].slice(
+        let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
             localIndexToStart,
             localIndexToEnd + 1
         );
@@ -152,12 +155,12 @@ const getNewsfeed = async (req, res) => {
         // not within range
         if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
             const { data } = await newsfeed.get(
-                `?at=${whichPage}&user-id=${id}&paging=${Math.floor(
+                `?at=${whichPage}&user-id=${userAsking}&paging=${Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 )}`
             );
-            userTempNewsfeedStorage[id] = data.data;
-            let newsfeedToReturn = userTempNewsfeedStorage[id].slice(
+            userTempNewsfeedStorage[userAsking] = data.data;
+            let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
                 0,
                 NEWSFEED_PER_PAGE_FOR_CLIENT
             );
@@ -184,7 +187,7 @@ const getNewsfeed = async (req, res) => {
 
             res.send({ data: newsfeedToReturn });
             redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + id,
+                "NFGS_start_index_for_temp_storage_user_" + userAsking,
                 Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 ) * NEWSFEED_PER_PAGE_FOR_WEB_SERVER
@@ -215,18 +218,21 @@ const getNewsfeed = async (req, res) => {
             return;
         } else {
             let newsfeedToReturn =
-                userTempNewsfeedStorage[id].slice(localIndexToStart);
+                userTempNewsfeedStorage[userAsking].slice(localIndexToStart);
             const newsfeedRequiredFromNFGS =
                 NEWSFEED_PER_PAGE_FOR_CLIENT -
                 (NEWSFEED_PER_PAGE_FOR_WEB_SERVER - localIndexToStart);
             const { data } = await newsfeed.get(
-                `?at=${whichPage}&user-id=${id}&paging=${Math.floor(
+                `?at=${whichPage}&user-id=${userAsking}&paging=${Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 )}`
             );
-            userTempNewsfeedStorage[id] = data.data;
+            userTempNewsfeedStorage[userAsking] = data.data;
             newsfeedToReturn = newsfeedToReturn.concat(
-                userTempNewsfeedStorage[id].slice(0, newsfeedRequiredFromNFGS)
+                userTempNewsfeedStorage[userAsking].slice(
+                    0,
+                    newsfeedRequiredFromNFGS
+                )
             );
 
             // add author profile_pic_url and commentor
@@ -251,7 +257,7 @@ const getNewsfeed = async (req, res) => {
 
             res.send({ data: newsfeedToReturn });
             redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + id,
+                "NFGS_start_index_for_temp_storage_user_" + userAsking,
                 Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 ) * NEWSFEED_PER_PAGE_FOR_WEB_SERVER
@@ -259,8 +265,16 @@ const getNewsfeed = async (req, res) => {
             return;
         }
     } else if (whichPage === "profile") {
-        // add author profile_pic_url and commentor
-        let newsfeedToReturn = await Feed.find({ user_id: id, paging });
+        if (!userInQuestion) {
+            res.status(400).send({ error: "Missing information" });
+            return;
+        }
+
+        // feed audience list must include req.user.id
+        let newsfeedToReturn = await Feed.find({
+            user_id: userInQuestion,
+            paging,
+        });
         newsfeedToReturn = newsfeedToReturn.map((feed) => {
             return {
                 ...feed,
@@ -283,38 +297,77 @@ const getNewsfeed = async (req, res) => {
     }
 };
 
+// /user/info?at=index&username= (username query is required if at == profile)
 const getUserInfo = async (req, res) => {
-    const id = req.user.id;
+    const userAsking = req.user.id;
     const whichPage = req.query.at;
-    console.log(req.user);
+    const usernameInQuestion = req.query.username;
     if (whichPage === "index") {
-        const { id: user_id, username, profile_pic_url } = req.user;
+        const { id: userAsking, username, profile_pic_url } = req.user;
         res.send({
             data: {
-                user_id,
+                user_id: userAsking,
                 username,
                 profile_pic_url,
             },
         });
     } else if (whichPage === "profile") {
+        if (!usernameInQuestion) {
+            res.status(400).send({ error: "Missing information" });
+            return;
+        }
+
+        const [userPacket] = await User.find(["id"], {
+            username: usernameInQuestion,
+        });
+        const userInQuestion = userPacket.id;
+
         // res.send({user_info: "", profile_pic_url: req.user.profile_pic_url, friend_count: 0, recent_friends: []})
         const recent_friends = await User.findFriends(
             true,
-            { user_id: id, status: "accepted" },
+            { user_id: userInQuestion, status: "accepted" },
             0
         );
-        const profile_pic_url = req.user.profile_pic_url;
-        const { user_info, username, friend_count } = await User.getUserInfo(
-            id
-        );
-        res.send({
-            user_id: id,
+        const {
             user_info,
             username,
-            profile_pic_url,
             friend_count,
-            recent_friends,
+            user_profile_pic,
+            friend_status,
+        } = await User.getUserInfo({
+            user_asking: userAsking,
+            user_in_question: userInQuestion,
         });
+
+        if (userAsking === userInQuestion) {
+            res.send({
+                user_id: userInQuestion,
+                user_info,
+                username,
+                profile_pic_url: User.generatePictureUrl({
+                    has_profile: user_profile_pic == 1,
+                    id: userInQuestion,
+                }),
+                friend_count,
+                recent_friends,
+                friend_status: "self",
+            });
+            return;
+        } else {
+            res.send({
+                user_id: userInQuestion,
+                user_info,
+                username,
+                profile_pic_url: User.generatePictureUrl({
+                    has_profile: user_profile_pic == 1,
+                    id: userInQuestion,
+                }),
+                friend_count,
+                recent_friends,
+                friend_status: friend_status || "stranger",
+            });
+            return;
+        }
     }
 };
 
@@ -344,10 +397,16 @@ const userLikesEdge = async (req, res) => {
 
 // /user/friend
 const getUserFriends = async (req, res) => {
-    const { id, status, paging } = req.query;
+    let { id: userInQuestion, status, paging } = req.query;
+    userInQuestion = +userInQuestion;
+    const userAsking = req.user.id;
+    if (userAsking !== userInQuestion && status !== "accepted") {
+        res.status(403).send({ error: "Not authorized" });
+        return;
+    }
     const friends = await User.findFriends(
         null,
-        { user_id: id, status },
+        { user_id: userInQuestion, status },
         paging
     );
     res.send({ data: friends });
@@ -355,7 +414,7 @@ const getUserFriends = async (req, res) => {
 
 const userBefriends = async (req, res) => {
     const outgoing_user_id = req.user.id;
-    const friend_userid = req.query["user-id"];
+    const friend_userid = +req.query["user-id"];
     const outgoing_action = req.query.action;
     await User.befriend({ outgoing_user_id, friend_userid, outgoing_action });
     res.sendStatus(201);
@@ -363,7 +422,7 @@ const userBefriends = async (req, res) => {
 
 const userUnfriends = async (req, res) => {
     const outgoing_user_id = req.user.id;
-    const friend_userid = req.query["user-id"];
+    const friend_userid = +req.query["user-id"];
     await User.unfriend({ outgoing_user_id, friend_userid });
     res.sendStatus(200);
 };
@@ -372,7 +431,7 @@ const userUnfriends = async (req, res) => {
 // POST
 const userFollows = async (req, res) => {
     const outgoing_user_id = req.user.id;
-    const following_userid = req.query.id;
+    const following_userid = +req.query.id;
     await User.follow({ outgoing_user_id, following_userid });
     res.sendStatus(201);
 };
@@ -380,7 +439,7 @@ const userFollows = async (req, res) => {
 // DELETE
 const userUnfollows = async (req, res) => {
     const outgoing_user_id = req.user.id;
-    const following_userid = req.query.id;
+    const following_userid = +req.query.id;
     await User.unfollow({ outgoing_user_id, following_userid });
     res.sendStatus(200);
 };

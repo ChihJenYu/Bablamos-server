@@ -33,10 +33,11 @@ class User {
     }
 
     // return the user packets
-    static async find(filter) {
+    static async find(cols, filter) {
+        const colsClause = db.translateCols(cols);
         let query;
         const { whereClause, args } = db.translateFilter(filter);
-        query = `select * from user ${whereClause}`;
+        query = `select ${colsClause} from user ${whereClause}`;
         const [result] = await db.pool.query(query, args);
         return result;
     }
@@ -45,7 +46,7 @@ class User {
     static async findByCredentials({ email, password }) {
         // find matching email
         try {
-            const packet = await User.find({ email });
+            const packet = await User.find(null, { email });
             if (packet.length === 0) {
                 return null;
             } else {
@@ -164,13 +165,16 @@ class User {
             case "accept":
                 outgoingStatus = "accepted";
                 friendStatus = "accepted";
+                break;
             // this case shouldn't happen
             case "receive":
                 outgoingStatus = "received";
                 friendStatus = "sent";
-            default:
+                break;
+            case "send":
                 outgoingStatus = "sent";
                 friendStatus = "received";
+                break;
         }
         await db.pool.query(
             `INSERT INTO friendship (user_id, friend_userid, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = ?;
@@ -232,13 +236,20 @@ class User {
     }
 
     // user info and friend count
-    static async getUserInfo(id) {
+    static async getUserInfo({ user_asking, user_in_question }) {
         const [result] = await db.pool.query(
-            `select u.info as user_info, u.username, count(f.friend_userid) as friend_count
-                from user u join friendship f on u.id = f.user_id
-                where u.id = ?
-                group by u.id`,
-            [id]
+            `select u.info as user_info, u.user_profile_pic, u.username, count(f.friend_userid) as friend_count,
+            fsv.status as friend_status
+            from user u 
+            join friendship f on u.id = f.user_id
+            left join 
+            (
+                select status, user_id, friend_userid from friendship where user_id = ? and friend_userid = ?
+            ) fsv
+            on f.user_id = fsv.friend_userid
+            where u.id = ?
+            group by u.id`,
+            [user_asking, user_in_question, user_in_question]
         );
         return result[0];
     }
