@@ -1,12 +1,15 @@
 const { getUserIds, calcEdgeRankScore } = require("../models");
 const Feed = require("../../models/feed");
 const redisClient = require("../redis");
+const User = require("../models/user");
 
 const initialization = async () => {
     await redisClient.FLUSHDB();
     const newsfeedBulkTable = {};
 
-    const user_ids = await getUserIds({ type: "all" });
+    let user_ids = await getUserIds({ type: "all" });
+    user_ids = user_ids.map((idObj) => idObj.id);
+    
     for (let id of user_ids) {
         const beginTime = Date.now();
         if (!newsfeedBulkTable[id.id]) {

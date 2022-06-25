@@ -234,8 +234,8 @@ const generateUserMentionsTable = async () => {
     return userMentionsTable;
 };
 
+// { '1': { '2': 300.000, '3': 325.000 }, ... }
 const generateUserAffinityTable = async () => {
-    // { '1': { '2': 300.000, '3': 325.000 }, ... }
     const userLikesTable = await generateUserLikesTable();
     const userCommentsTable = await generateUserCommentsTable();
     const userMentionsTable = await generateUserMentionsTable();
@@ -244,7 +244,7 @@ const generateUserAffinityTable = async () => {
 
     for (let idObject of allUserIds) {
         const userId = idObject.id;
-        userAffinityTable[userId] = {};
+        userAffinityTable[userId] = [];
         for (let otherIdObject of allUserIds) {
             const otherUserId = otherIdObject.id;
             if (userId == otherUserId) {
@@ -364,7 +364,8 @@ const generateUserAffinityTable = async () => {
                 MENTION_WEIGHT * mentionScore +
                 LIKE_WEIGHT * likeScore;
 
-            userAffinityTable[userId][otherUserId] = affinity;
+            userAffinityTable[userId][otherUserId] =
+                affinity == 0 ? undefined : affinity;
         }
     }
     return userAffinityTable;
@@ -441,15 +442,22 @@ const calculateTimeDecayFactor = (feed) => {
     }
 };
 
-const calcEdgeRankScore = async (feed, my_user_id) => {
-    const affinity = await calculateIndividualAffinity(my_user_id, feed.userid);
-    const edgeWeight = await calculateEdgeWeight(feed, my_user_id, feed.id);
-    const timeDecayFactor = await calculateTimeDecayFactor(feed);
-    return (affinity + edgeWeight) / timeDecayFactor;
+const calculateAlreadySeenFactor = (views) => {
+    return Math.pow(1.25, views);
+};
+
+const calcEdgeRankScore = async ({ affinity, feed, my_user_id, views }) => {
+    const affinityUsed =
+        affinity ||
+        (await calculateIndividualAffinity(my_user_id, feed.userid));
+    let edgeWeight = await calculateEdgeWeight(feed, my_user_id, feed.id);
+    let timeDecayFactor = calculateTimeDecayFactor(feed);
+    let alreadySeenFactor = calculateAlreadySeenFactor(views);
+    return (affinityUsed + edgeWeight) / timeDecayFactor / alreadySeenFactor;
 };
 
 module.exports = {
     getUserIds,
     generateUserAffinityTable,
-    calcEdgeRankScore
+    calcEdgeRankScore,
 };
