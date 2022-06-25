@@ -118,13 +118,13 @@ const userSignIn = async (req, res) => {
 // returns an array of parsed Feed objects
 const getNewsfeed = async (req, res) => {
     const whichPage = req.query.at;
-    const paging = req.query.paging || 0;
+    const paging = +req.query.paging || 0;
     const userAsking = req.user.id;
     const userInQuestion = req.query.id;
 
     if (whichPage === "index") {
         // initialization
-        if (!userTempNewsfeedStorage[userAsking]) {
+        if (!userTempNewsfeedStorage[userAsking] || paging === 0) {
             userTempNewsfeedStorage[userAsking] = [];
             await redisClient.set(
                 "NFGS_start_index_for_temp_storage_user_" + userAsking,
@@ -159,65 +159,15 @@ const getNewsfeed = async (req, res) => {
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 )}`
             );
+
             userTempNewsfeedStorage[userAsking] = data.data;
-            let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
+            newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
                 0,
                 NEWSFEED_PER_PAGE_FOR_CLIENT
             );
-
-            // add author profile_pic_url and commentor
-            newsfeedToReturn = newsfeedToReturn.map((feed) => {
-                return {
-                    ...feed,
-                    profile_pic_url: User.generatePictureUrl({
-                        has_profile: feed.user_profile_pic == 1,
-                        id: feed.user_id,
-                    }),
-                    latest_comments: feed.latest_comments.map((comment) => {
-                        return {
-                            ...comment,
-                            profile_pic_url: User.generatePictureUrl({
-                                has_profile: comment.user_profile_pic == 1,
-                                id: comment.user_id,
-                            }),
-                        };
-                    }),
-                };
-            });
-
-            res.send({ data: newsfeedToReturn });
-            redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
-                Math.floor(
-                    requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
-                ) * NEWSFEED_PER_PAGE_FOR_WEB_SERVER
-            );
-            return;
         } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
-            // add author profile_pic_url and commentor
-            newsfeedToReturn = newsfeedToReturn.map((feed) => {
-                return {
-                    ...feed,
-                    profile_pic_url: User.generatePictureUrl({
-                        has_profile: feed.user_profile_pic == 1,
-                        id: feed.user_id,
-                    }),
-                    latest_comments: feed.latest_comments.map((comment) => {
-                        return {
-                            ...comment,
-                            profile_pic_url: User.generatePictureUrl({
-                                has_profile: comment.user_profile_pic == 1,
-                                id: comment.user_id,
-                            }),
-                        };
-                    }),
-                };
-            });
-
-            res.send({ data: newsfeedToReturn });
-            return;
         } else {
-            let newsfeedToReturn =
+            newsfeedToReturn =
                 userTempNewsfeedStorage[userAsking].slice(localIndexToStart);
             const newsfeedRequiredFromNFGS =
                 NEWSFEED_PER_PAGE_FOR_CLIENT -
@@ -227,6 +177,7 @@ const getNewsfeed = async (req, res) => {
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 )}`
             );
+
             userTempNewsfeedStorage[userAsking] = data.data;
             newsfeedToReturn = newsfeedToReturn.concat(
                 userTempNewsfeedStorage[userAsking].slice(
@@ -234,36 +185,40 @@ const getNewsfeed = async (req, res) => {
                     newsfeedRequiredFromNFGS
                 )
             );
-
-            // add author profile_pic_url and commentor
-            newsfeedToReturn = newsfeedToReturn.map((feed) => {
-                return {
-                    ...feed,
-                    profile_pic_url: User.generatePictureUrl({
-                        has_profile: feed.user_profile_pic == 1,
-                        id: feed.user_id,
-                    }),
-                    latest_comments: feed.latest_comments.map((comment) => {
-                        return {
-                            ...comment,
-                            profile_pic_url: User.generatePictureUrl({
-                                has_profile: comment.user_profile_pic == 1,
-                                id: comment.user_id,
-                            }),
-                        };
-                    }),
-                };
-            });
-
-            res.send({ data: newsfeedToReturn });
             redisClient.set(
                 "NFGS_start_index_for_temp_storage_user_" + userAsking,
                 Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 ) * NEWSFEED_PER_PAGE_FOR_WEB_SERVER
             );
-            return;
         }
+
+        // add author profile_pic_url and commentor
+        for (let i = 0; i < newsfeedToReturn.length; i++) {
+            const feedId = newsfeedToReturn[i].id;
+            const feedContent = await Feed.getFeedDetail(feedId, userAsking);
+            feedContent.profile_pic_url = User.generatePictureUrl({
+                has_profile: feedContent.user_profile_pic == 1,
+                id: feedContent.user_id,
+            });
+            delete feedContent.user_profile_pic;
+            feedContent.latest_comments = feedContent.latest_comments.map(
+                (comment) => {
+                    const newObj = {
+                        ...comment,
+                        profile_pic_url: User.generatePictureUrl({
+                            has_profile: comment.user_profile_pic == 1,
+                            id: comment.user_id,
+                        }),
+                    };
+                    delete newObj.user_profile_pic;
+                    return newObj;
+                }
+            );
+            feedContent.is_new = newsfeedToReturn[i].is_new;
+            newsfeedToReturn[i] = feedContent;
+        }
+        res.send({ data: newsfeedToReturn });
     } else if (whichPage === "profile") {
         if (!userInQuestion) {
             res.status(400).send({ error: "Missing information" });
@@ -271,10 +226,11 @@ const getNewsfeed = async (req, res) => {
         }
 
         // feed audience list must include req.user.id
-        let newsfeedToReturn = await Feed.find({
-            user_id: userInQuestion,
-            paging,
-        });
+        let newsfeedToReturn = await Feed.findByAuthorId(
+            userInQuestion,
+            userAsking,
+            paging
+        );
         newsfeedToReturn = newsfeedToReturn.map((feed) => {
             return {
                 ...feed,
@@ -466,6 +422,15 @@ const dropFollowers = async (req, res) => {
     res.sendStatus(200);
 };
 
+// /user/read?post-id=
+const readPost = (req, res) => {
+    const user_id = req.user.id;
+    const post_id = req.query["post-id"];
+    newsfeed.post(`/update/recalc?user-id=${user_id}&post-id=${post_id}`);
+    console.log("Firing recalc request");
+    res.sendStatus(200);
+};
+
 module.exports = {
     userSignUp,
     userSignIn,
@@ -480,4 +445,5 @@ module.exports = {
     getUserFollowings,
     getUserFollowers,
     dropFollowers,
+    readPost,
 };

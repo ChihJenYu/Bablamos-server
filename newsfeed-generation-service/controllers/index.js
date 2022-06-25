@@ -1,18 +1,12 @@
 const redisClient = require("../redis");
-const { Feed } = require("../utils/feed");
-const {
-    getUserIds,
-    calculateAffinity,
-    calculateEdgeWeight,
-    calcTimeDecayFactor,
-    calcEdgeRankScore,
-} = require("../models");
+const Feed = require("../../models/feed");
+const { getUserIds, calcEdgeRankScore } = require("../models");
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 
 const getNewsfeed = async (req, res) => {
     const whichPage = req.query.at;
-    const userId = req.query["user-id"];
-    const paging = req.query.paging;
+    const userId = +req.query["user-id"];
+    const paging = +req.query.paging;
     const newsfeed = await redisClient.LRANGE(
         "" + userId,
         NEWSFEED_PER_PAGE_FOR_WEB_SERVER * paging, // starting index
@@ -26,7 +20,7 @@ const getNewsfeed = async (req, res) => {
 
 const updateNewsfeed = async (req, res) => {
     const method = req.query.method;
-    const userId = req.query["user-id"];
+    const userId = +req.query["user-id"];
     const httpMethod = req.method;
     const newFeed = new Feed(req.body);
 
@@ -37,56 +31,29 @@ const updateNewsfeed = async (req, res) => {
             user_id: userId,
         });
 
+        // done
         if (httpMethod === "POST") {
             console.log(
                 "New feed to insert into followers' news feed: ",
                 newFeed
             );
 
-            // calculate time decay factor of the new feed
-            // const timeDecayFactor = calcTimeDecayFactor(newFeed);
-
             // for each follower
             for (let i = 0; i < followerIds.length; i++) {
                 const followerId = followerIds[i].id;
-                await redisClient.LPUSH("" + followerId, JSON.stringify(newFeed));
-                // calculate edge rank score of the new feed for each follower
-                // const affinity = await calculateAffinity(followerId, userId);
-                // const edgeWeight = await calculateEdgeWeight(
-                //     newFeed,
-                //     followerId,
-                //     newFeed.id
-                // );
-                // const edgeRankScore = calcEdgeRankScore(
-                //     affinity,
-                //     edgeWeight,
-                //     timeDecayFactor
-                // );
-                // newFeed.edge_rank_score = edgeRankScore;
-                // const followerNewsfeed = await redisClient.LRANGE(
-                //     "" + followerId,
-                //     0,
-                //     -1
-                // );
-
-                // let followerNewsfeedParsed = followerNewsfeed.map((feed) =>
-                //     JSON.parse(feed)
-                // );
-                // followerNewsfeedParsed.push(newFeed);
-                // followerNewsfeedParsed.sort(
-                //     (item1, item2) =>
-                //         item2.edge_rank_score - item1.edge_rank_score
-                // );
-                // await redisClient.DEL("" + followerId);
-                // for (let i = 0; i < followerNewsfeedParsed.length; i++) {
-                //     await redisClient.RPUSH(
-                //         "" + followerId,
-                //         JSON.stringify(followerNewsfeedParsed[i])
-                //     );
-                // }
+                await redisClient.LPUSH(
+                    "" + followerId,
+                    JSON.stringify({
+                        id: newFeed.id,
+                        edge_rank_score: 0,
+                        is_new: 1,
+                    })
+                );
             }
-            console.log("Cache ready.");
-        } else if (httpMethod === "PATCH") {
+            console.log(`Push of post #${newFeed.id} to followers complete.`);
+        }
+        // needs fixing
+        else if (httpMethod === "PATCH") {
             for (let i = 0; i < followerIds.length; i++) {
                 const followerId = followerIds[i].id;
                 const followerNewsfeed = await redisClient.LRANGE(
@@ -108,7 +75,9 @@ const updateNewsfeed = async (req, res) => {
                 );
             }
             console.log("Cache ready.");
-        } else if (httpMethod === "DELETE") {
+        }
+        // needs fixing
+        else if (httpMethod === "DELETE") {
             for (let i = 0; i < followerIds.length; i++) {
                 const followerId = followerIds[i].id;
                 await redisClient.LREM(
@@ -123,4 +92,60 @@ const updateNewsfeed = async (req, res) => {
     res.sendStatus(200);
 };
 
-module.exports = { getNewsfeed, updateNewsfeed };
+// needs a 'find index by key in array of object' function
+const recalcNewsfeed = async (req, res) => {
+    const postId = +req.query["post-id"];
+    const userId = +req.query["user-id"];
+
+    const result = await redisClient.LREM(
+        "" + userId,
+        0,
+        JSON.stringify({
+            id: postId,
+            edge_rank_score: 0,
+            is_new: 1,
+        })
+    );
+
+    // feed is already not new; do nothing
+    if (result !== 1) {
+        res.sendStatus(200);
+        return;
+    }
+
+    const targetFeed = await Feed.getFeedDetail(postId);
+    const edgeRankScore = await calcEdgeRankScore(targetFeed, userId);
+    let userNewsfeed = await redisClient.LRANGE("" + userId, 0, -1);
+    userNewsfeed = userNewsfeed.map((nf) => JSON.parse(nf));
+
+    // get the index where the recalculated feed should be
+    userNewsfeed.push({
+        id: postId,
+        edge_rank_score: edgeRankScore,
+    });
+
+    const shouldBeAtIdx = userNewsfeed
+        .sort((feed1, feed2) => {
+            return feed2.edge_rank_score - feed1.edge_rank_score;
+        })
+        .map((obj) => {
+            return obj.id;
+        })
+        .indexOf(postId);
+
+    console.log("Recalculated feed should be at index ", shouldBeAtIdx);
+
+    await redisClient.LSET(
+        "" + userId,
+        shouldBeAtIdx,
+        JSON.stringify({ id: postId, edge_rank_score: edgeRankScore })
+    );
+
+    console.log(
+        `Recalculation of post #${postId} for user #${userId} complete`
+    );
+
+    res.sendStatus(200);
+};
+
+module.exports = { getNewsfeed, updateNewsfeed, recalcNewsfeed };

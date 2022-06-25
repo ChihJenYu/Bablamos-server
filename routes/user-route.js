@@ -15,6 +15,7 @@ const {
     getUserFollowers,
     dropFollowers,
     getUserFollowings,
+    readPost,
 } = require("../controllers/user-controller");
 const { multerMiddleware } = require("../utils/util");
 
@@ -55,5 +56,7 @@ router
     .route("/user/follower")
     .get(asyncErrorHandler(getUserFollowers)) // id, paging
     .delete([authentication, asyncErrorHandler(dropFollowers)]); // type, req.body: {user_id_to_drop: []}
+
+router.route("/user/read").post([authentication, readPost]);
 
 module.exports = router;

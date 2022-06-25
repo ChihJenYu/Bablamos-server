@@ -48,7 +48,7 @@ class Comment extends Edge {
             await conn.query("START TRANSACTION");
             if (this.id) {
                 // update
-                const postMentionsArray = this.mentioned_users.map(
+                const commentMentionsArray = this.mentioned_users.map(
                     (user_id) => {
                         return [this.id, user_id];
                     }
@@ -59,17 +59,20 @@ class Comment extends Edge {
                     [this.content, this.photo_count, this.id]
                 );
 
-                await conn.query(
-                    `DELETE FROM mention_user WHERE comment_id = ?; INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
-                    [this.id, postMentionsArray]
-                );
+                if (commentMentionsArray.length !== 0) {
+                    await conn.query(
+                        `DELETE FROM mention_user WHERE comment_id = ?; INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
+                        [this.id, commentMentionsArray]
+                    );
+                }
+
                 await conn.query("COMMIT");
                 return true;
             } else {
                 const [{ insertId: comment_id }] = await conn.query(
                     `INSERT INTO comment
             (post_id, user_id, content, photo_count, level, replied_comment_id)
-            VALUES (?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?)`,
                     [
                         this.post_id,
                         this.user_id,
@@ -91,16 +94,18 @@ class Comment extends Edge {
                 this.id = id;
                 this.created_at = created_at;
 
-                const postMentionsArray = this.mentioned_users.map(
+                const commentMentionsArray = this.mentioned_users.map(
                     (user_id) => {
                         return [this.id, user_id];
                     }
                 );
 
-                await conn.query(
-                    `INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
-                    [postMentionsArray]
-                );
+                if (commentMentionsArray.length !== 0) {
+                    await conn.query(
+                        `INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
+                        [commentMentionsArray]
+                    );
+                }
 
                 // commit transaction
                 await conn.query("COMMIT");

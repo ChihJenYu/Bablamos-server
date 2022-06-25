@@ -1,6 +1,5 @@
 const db = require("../mysql");
-const Post = require("../../models/post");
-const Comment = require("../../models/comment");
+const { getValueOr } = require("../../utils/util");
 // AFFINITY
 const MESSAGE_WEIGHT = 4;
 const MENTION_WEIGHT = 3;
@@ -46,141 +45,6 @@ const getUserIds = async (arg) => {
     }
 };
 
-// refetch a user's entire news feed without ordering by edge rank score
-const refreshFeed = async (user_id) => {
-    const feedMentionedUsersTable = {};
-    const feedPhotoCountTable = {};
-    const feedTagsTable = {};
-
-    const [allFeeds] = await db.pool.query(
-        `select lc.id, lc.user_id, u.user_profile_pic, u.username, lc.content, unix_timestamp(lc.created_at) as created_at, lc.audience_type_id, lc.shared_post_id, lc.like_count, cc.comment_count, sc.share_count
-                from 
-                (
-                select 
-                    post.id, post.user_id, post.content, post.created_at, post.audience_type_id, post.shared_post_id, 
-                    count(lu.user_id) as like_count
-                from post 
-                left join like_user lu on post.id = lu.post_id
-                where post.user_id in (select friend_userid from friendship where user_id = ?)
-                group by post.id
-                order by post.created_at desc
-                ) as lc
-                join 
-                (
-                select 
-                    post.id, count(c.id) as comment_count
-                from post 
-                left join comment c on post.id = c.post_id
-                where post.user_id in (select friend_userid from friendship where user_id = ?)
-                group by post.id
-                order by post.created_at desc
-                ) as cc on lc.id = cc.id
-                join 
-                (
-                select 
-                    post.id, sc.share_count
-                from post 
-                left join 
-                (
-                    select distinct p.id, 
-                    case when 
-                    share_view.count is null
-                    then 0 
-                    else share_view.count
-                    end as share_count
-                    from post p 
-                    left join (select distinct shared_post_id, count(*) as count from post group by shared_post_id) share_view on p.id = share_view.shared_post_id
-                ) sc on post.id = sc.id
-                where post.user_id in (select friend_userid from friendship where user_id = ?)
-                group by post.id, sc.share_count
-                order by post.created_at desc
-                ) as sc on cc.id = sc.id
-                join 
-                user u on lc.user_id = u.id
-                `,
-        [user_id, user_id, user_id]
-    );
-    const [allFeedsMentionedUsers] = await db.pool.query(
-        `select mu.post_id as post_id, mu.user_id as mentioned_user_id, u.username, u.user_profile_pic
-                from mention_user mu
-                join post p
-                on mu.post_id = p.id
-                join user u
-                on u.id = mu.user_id
-                where p.user_id in (select friend_userid from friendship where user_id = ?)
-                `,
-        [user_id]
-    );
-    const [allFeedsPhotoCount] = await db.pool.query(
-        `select p.id as post_id, p.photo_count from post p
-                where p.user_id in (select friend_userid from friendship where user_id = ?)`,
-        [user_id]
-    );
-    const [allFeedsTags] = await db.pool.query(
-        `select p.id as post_id, pt.tag_id, t.name as tag_name from post_tag pt
-                join post p on p.id = pt.post_id
-                join tag t on t.id = pt.tag_id
-                where p.user_id in (select friend_userid from friendship where user_id = ?)
-                `,
-        [user_id]
-    );
-
-    // each of the following table looks like
-    // { post_id: [{ id, content }, { id, content }, ...] }
-    allFeedsMentionedUsers.forEach((mentionedUser) => {
-        if (!feedMentionedUsersTable[mentionedUser.post_id]) {
-            feedMentionedUsersTable[mentionedUser.post_id] = [
-                {
-                    user_id: mentionedUser.mentioned_user_id,
-                    username: mentionedUser.username,
-                    user_profile_pic: mentionedUser.user_profile_pic,
-                },
-            ];
-        } else {
-            feedMentionedUsersTable[mentionedUser.post_id].push({
-                user_id: mentionedUser.mentioned_user_id,
-                username: mentionedUser.username,
-                user_profile_pic: mentionedUser.user_profile_pic,
-            });
-        }
-    });
-    allFeedsPhotoCount.forEach((feedPhoto) => {
-        feedPhotoCountTable[feedPhoto.post_id] = feedPhoto.photo_count;
-    });
-    allFeedsTags.forEach((feedTag) => {
-        if (!feedTagsTable[feedTag.post_id]) {
-            feedTagsTable[feedTag.post_id] = [
-                {
-                    id: feedTag.tag_id,
-                    tag_name: feedTag.tag_name,
-                },
-            ];
-        } else {
-            feedTagsTable[feedTag.post_id].push({
-                id: feedTag.tag_id,
-                tag_name: feedTag.tag_name,
-            });
-        }
-    });
-
-    return {
-        allFeeds,
-        feedMentionedUsersTable,
-        feedPhotoCountTable,
-        feedTagsTable,
-    };
-};
-
-const getLatestComments = async (post_id, comment_count) => {
-    let [latestComments] = await db.pool.query(
-        `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, c.level, c.replied_comment_id, u.username, u.user_profile_pic 
-        from comment c join user u on c.user_id = u.id
-        where post_id = ? and level = 1 order by created_at asc limit ?`,
-        [post_id, comment_count]
-    );
-    return latestComments;
-};
-
 const calcOutgoingLikesOnUserEventfulEdge = async (
     my_user_id,
     other_user_id
@@ -208,7 +72,305 @@ const calcIncomingLikesOnMyEventfulEdge = async (my_user_id, other_user_id) => {
     return incomingLikeOnEventfulEdge;
 };
 
-const calculateAffinity = async (my_user_id, other_user_id) => {
+// table of how many times each user id has liked my post
+// type: eventful_edge, comment
+const generateUserLikesTable = async () => {
+    const userLikesTable = {};
+    const [userLikes] = await db.pool.query(
+        `select p.user_id as author_id, lu.user_id, 'eventful_edge' as type
+        from post p join like_user lu on p.id = lu.post_id
+        where p.user_id != lu.user_id
+        union
+        select c.user_id as author_id, lu.user_id, 'comment' as type
+        from comment c join like_user lu on c.id = lu.comment_id
+        where c.user_id != lu.user_id
+        `
+    );
+    for (let userLikeUser of userLikes) {
+        if (!userLikesTable[userLikeUser.author_id]) {
+            userLikesTable[userLikeUser.author_id] = {};
+            userLikesTable[userLikeUser.author_id][userLikeUser.user_id] = {};
+            userLikesTable[userLikeUser.author_id][userLikeUser.user_id][
+                userLikeUser.type
+            ] = 1;
+        } else {
+            if (!userLikesTable[userLikeUser.author_id][userLikeUser.user_id]) {
+                userLikesTable[userLikeUser.author_id][userLikeUser.user_id] =
+                    {};
+                userLikesTable[userLikeUser.author_id][userLikeUser.user_id][
+                    userLikeUser.type
+                ] = 1;
+            } else {
+                if (
+                    !userLikesTable[userLikeUser.author_id][
+                        userLikeUser.user_id
+                    ][userLikeUser.type]
+                ) {
+                    userLikesTable[userLikeUser.author_id][
+                        userLikeUser.user_id
+                    ][userLikeUser.type] = 1;
+                } else {
+                    userLikesTable[userLikeUser.author_id][
+                        userLikeUser.user_id
+                    ][userLikeUser.type]++;
+                }
+            }
+        }
+    }
+    return userLikesTable;
+};
+
+// table of how many times each user id has commented on my post or comment
+// level: 1, 2
+const generateUserCommentsTable = async () => {
+    const userCommentsTable = {};
+    const [userComments] = await db.pool.query(
+        `select c.id, p.user_id as commentee_id, c.user_id as commentor_id, 1 as level
+        from comment c
+        join post p on c.post_id = p.id
+        join user u on p.user_id = u.id
+        where p.user_id != c.user_id
+        UNION
+        select c_second_level.id, c.user_id as commentee_id, c_second_level.user_id as commentor_id, 2 as level
+        from comment c
+        join comment c_second_level
+        on c.id = c_second_level.replied_comment_id
+        where c.user_id != c_second_level.user_id
+        `
+    );
+    for (let commenteeCommentors of userComments) {
+        if (!userCommentsTable[commenteeCommentors.commentee_id]) {
+            userCommentsTable[commenteeCommentors.commentee_id] = {};
+            userCommentsTable[commenteeCommentors.commentee_id][
+                commenteeCommentors.commentor_id
+            ] = {};
+            userCommentsTable[commenteeCommentors.commentee_id][
+                commenteeCommentors.commentor_id
+            ][commenteeCommentors.level] = 1;
+        } else {
+            if (
+                !userCommentsTable[commenteeCommentors.commentee_id][
+                    commenteeCommentors.commentor_id
+                ]
+            ) {
+                userCommentsTable[commenteeCommentors.commentee_id][
+                    commenteeCommentors.commentor_id
+                ] = {};
+                userCommentsTable[commenteeCommentors.commentee_id][
+                    commenteeCommentors.commentor_id
+                ][commenteeCommentors.level] = 1;
+            } else {
+                if (
+                    !userCommentsTable[commenteeCommentors.commentee_id][
+                        commenteeCommentors.commentor_id
+                    ][commenteeCommentors.level]
+                ) {
+                    userCommentsTable[commenteeCommentors.commentee_id][
+                        commenteeCommentors.commentor_id
+                    ][commenteeCommentors.level] = 1;
+                } else {
+                    userCommentsTable[commenteeCommentors.commentee_id][
+                        commenteeCommentors.commentor_id
+                    ][commenteeCommentors.level]++;
+                }
+            }
+        }
+    }
+    return userCommentsTable;
+};
+
+// table of how many times each user id has mentioned me on posts or comments
+// type: eventful_edge, comment
+const generateUserMentionsTable = async () => {
+    const userMentionsTable = {};
+    const [userMentions] = await db.pool.query(
+        `select p.user_id as author_id, mu.user_id as mentioned_user, 'eventful_edge' as type
+        from post p join mention_user mu on p.id = mu.post_id
+        where p.user_id != mu.user_id
+        union
+        select c.user_id as author_id, mu.user_id as mentioned_user, 'comment' as type
+        from comment c join mention_user mu on c.id = mu.comment_id
+        where c.user_id != mu.user_id
+        `
+    );
+    for (let authorMentionedUser of userMentions) {
+        if (!userMentionsTable[authorMentionedUser.mentioned_user]) {
+            userMentionsTable[authorMentionedUser.mentioned_user] = {};
+            userMentionsTable[authorMentionedUser.mentioned_user][
+                authorMentionedUser.author_id
+            ] = {};
+            userMentionsTable[authorMentionedUser.mentioned_user][
+                authorMentionedUser.author_id
+            ][authorMentionedUser.type] = 1;
+        } else {
+            if (
+                !userMentionsTable[authorMentionedUser.mentioned_user][
+                    authorMentionedUser.author_id
+                ]
+            ) {
+                userMentionsTable[authorMentionedUser.mentioned_user][
+                    authorMentionedUser.author_id
+                ] = {};
+                userMentionsTable[authorMentionedUser.mentioned_user][
+                    authorMentionedUser.author_id
+                ][authorMentionedUser.type] = 1;
+            } else {
+                if (
+                    !userMentionsTable[authorMentionedUser.mentioned_user][
+                        authorMentionedUser.author_id
+                    ][authorMentionedUser.type]
+                ) {
+                    userMentionsTable[authorMentionedUser.mentioned_user][
+                        authorMentionedUser.author_id
+                    ][authorMentionedUser.type] = 1;
+                } else {
+                    userMentionsTable[authorMentionedUser.mentioned_user][
+                        authorMentionedUser.author_id
+                    ][authorMentionedUser.type]++;
+                }
+            }
+        }
+    }
+    return userMentionsTable;
+};
+
+const generateUserAffinityTable = async () => {
+    // { '1': { '2': 300.000, '3': 325.000 }, ... }
+    const userLikesTable = await generateUserLikesTable();
+    const userCommentsTable = await generateUserCommentsTable();
+    const userMentionsTable = await generateUserMentionsTable();
+    const userAffinityTable = {};
+    const allUserIds = await getUserIds({ type: "all" });
+
+    for (let idObject of allUserIds) {
+        const userId = idObject.id;
+        userAffinityTable[userId] = {};
+        for (let otherIdObject of allUserIds) {
+            const otherUserId = otherIdObject.id;
+            if (userId == otherUserId) {
+                continue;
+            }
+            // calculate comment score
+            const outgoingFirstLevel = getValueOr(
+                userCommentsTable,
+                otherUserId,
+                userId,
+                "1",
+                0
+            );
+
+            const incomingFirstLevel = getValueOr(
+                userCommentsTable,
+                userId,
+                otherUserId,
+                "1",
+                0
+            );
+
+            const outgoingSecondLevel = getValueOr(
+                userCommentsTable,
+                otherUserId,
+                userId,
+                "2",
+                0
+            );
+            const incomingSecondLevel = getValueOr(
+                userCommentsTable,
+                userId,
+                otherUserId,
+                "2",
+                0
+            );
+
+            const commentScore =
+                4 * outgoingFirstLevel +
+                3 * outgoingSecondLevel +
+                2 * incomingFirstLevel +
+                incomingSecondLevel;
+
+            // calculate mention score
+            const outgoingMentionsOnEventfulEdge = getValueOr(
+                userMentionsTable,
+                otherUserId,
+                userId,
+                "eventful_edge",
+                0
+            );
+            const incomingMentionsOnEventfulEdge = getValueOr(
+                userMentionsTable,
+                userId,
+                otherUserId,
+                "eventful_edge",
+                0
+            );
+            const outgoingMentionsOnNonEventfulEdge = getValueOr(
+                userMentionsTable,
+                otherUserId,
+                userId,
+                "comment",
+                0
+            );
+            const incomingMentionsOnNonEventfulEdge = getValueOr(
+                userMentionsTable,
+                userId,
+                otherUserId,
+                "comment",
+                0
+            );
+            const mentionScore =
+                4 * outgoingMentionsOnEventfulEdge +
+                3 * outgoingMentionsOnNonEventfulEdge +
+                2 * incomingMentionsOnEventfulEdge +
+                incomingMentionsOnNonEventfulEdge;
+
+            // calculate like score
+            const outgoingLikesOnEventfulEdge = getValueOr(
+                userLikesTable,
+                otherUserId,
+                userId,
+                "eventful_edge",
+                0
+            );
+
+            const incomingLikesOnEventfulEdge = getValueOr(
+                userLikesTable,
+                userId,
+                otherUserId,
+                "eventful_edge",
+                0
+            );
+            const outgoingLikesOnNonEventfulEdge = getValueOr(
+                userLikesTable,
+                otherUserId,
+                userId,
+                "comment",
+                0
+            );
+            const incomingLikesOnNonEventfulEdge = getValueOr(
+                userLikesTable,
+                userId,
+                otherUserId,
+                "comment",
+                0
+            );
+            const likeScore =
+                4 * outgoingLikesOnEventfulEdge +
+                3 * outgoingLikesOnNonEventfulEdge +
+                2 * incomingLikesOnEventfulEdge +
+                incomingLikesOnNonEventfulEdge;
+
+            const affinity =
+                COMMENT_WEIGHT * commentScore +
+                MENTION_WEIGHT * mentionScore +
+                LIKE_WEIGHT * likeScore;
+
+            userAffinityTable[userId][otherUserId] = affinity;
+        }
+    }
+    return userAffinityTable;
+};
+
+const calculateIndividualAffinity = async (my_user_id, other_user_id) => {
     const outgoing = await calcOutgoingLikesOnUserEventfulEdge(
         my_user_id,
         other_user_id
@@ -261,12 +423,12 @@ const calculateEdgeWeight = async (feed, my_user_id, post_id) => {
     );
 };
 
-const calcTimeDecayFactor = (feed) => {
+const calculateTimeDecayFactor = (feed) => {
     const feedCreatedAtUnix = feed.created_at;
     const nowUnix = Date.now() / 1000;
     const timeDiff = nowUnix - feedCreatedAtUnix;
     if (timeDiff < 60 * 10) {
-        return 0.01;
+        return 1;
     } else if ((timeDiff >= 60 * 10) & (timeDiff < 60 * 60)) {
         return 1.1;
     } else if ((timeDiff >= 60 * 60 * 1) & (timeDiff < 60 * 60 * 6)) {
@@ -279,17 +441,15 @@ const calcTimeDecayFactor = (feed) => {
     }
 };
 
-const calcEdgeRankScore = (af, ew, td) => (af + ew) / td;
+const calcEdgeRankScore = async (feed, my_user_id) => {
+    const affinity = await calculateIndividualAffinity(my_user_id, feed.userid);
+    const edgeWeight = await calculateEdgeWeight(feed, my_user_id, feed.id);
+    const timeDecayFactor = await calculateTimeDecayFactor(feed);
+    return (affinity + edgeWeight) / timeDecayFactor;
+};
 
 module.exports = {
     getUserIds,
-    refreshFeed,
-    getLatestComments,
-    calcOutgoingLikesOnUserEventfulEdge,
-    calcIncomingLikesOnMyEventfulEdge,
-    calculateAffinity,
-    calcAvgWeightOnEventfulEdge,
-    calculateEdgeWeight,
-    calcTimeDecayFactor,
-    calcEdgeRankScore,
+    generateUserAffinityTable,
+    calcEdgeRankScore
 };

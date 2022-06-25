@@ -11,7 +11,7 @@ const createPost = async (req, res) => {
     //     mentioned_users: undefined,
     //     photo_count: number
     // }
-    const photo_count = req.files.length;
+    const photo_count = req.files ? req.files.length : 0;
     const { id: user_id, profile_pic_url, username } = req.user;
     const postData = req.body;
     const newPost = new Post({ ...postData, user_id, photo_count });
@@ -37,8 +37,6 @@ const createPost = async (req, res) => {
         ...newPost,
     });
 };
-
-const getPostDetail = async (req, res) => {};
 
 const editPost = async (req, res) => {
     // request query: post-id
@@ -80,7 +78,7 @@ const editPost = async (req, res) => {
 
 const deletePost = async (req, res) => {
     const user_id = req.user.id;
-    let post_id = req.post_id;
+    const post_id = req.post_id;
     await Post.delete(post_id);
 
     res.status(200).send({ id: post_id });

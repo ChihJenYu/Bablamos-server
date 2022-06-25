@@ -4,7 +4,7 @@ const { asyncErrorHandler } = require("../utils/util");
 const {
     createPost,
     editPost,
-    deletePost,
+    deletePost
 } = require("../controllers/post-controller");
 
 router

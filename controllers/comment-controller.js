@@ -10,7 +10,7 @@ const createComment = async (req, res) => {
     //     replied_comment_id: undefined,
     //     mentioned_users: [1, 2, 3],
     // }
-    const photo_count = req.files.length;
+    const photo_count = req.files ? req.files.length : 0;
     const commentData = req.body;
     const newComment = new Comment({
         ...commentData,

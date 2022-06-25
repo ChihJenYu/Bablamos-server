@@ -1,13 +1,5 @@
-const {
-    getUserIds,
-    refreshFeed,
-    getLatestComments,
-    calculateAffinity,
-    calcTimeDecayFactor,
-    calculateEdgeWeight,
-    calcEdgeRankScore,
-} = require("../models");
-const { Feed } = require("./feed");
+const { getUserIds, calcEdgeRankScore } = require("../models");
+const Feed = require("../../models/feed");
 const redisClient = require("../redis");
 
 const initialization = async () => {
@@ -22,45 +14,12 @@ const initialization = async () => {
 
             console.log(`Querying user id ${id.id}'s news feed items...`);
 
-            let {
-                allFeeds,
-                feedMentionedUsersTable,
-                feedPhotoCountTable,
-                feedTagsTable,
-            } = await refreshFeed(id.id);
+            let allFeeds = await Feed.findByViewer(id.id);
 
             for (let feedItem of allFeeds) {
                 const feed = new Feed(feedItem);
-                const latestComments = await getLatestComments(feed.id, 10);
-
-                // AFFINITY
-                // const feedItemUserId = feed.user_id;
-
-                // TIME DECAY
-                const timeDecayFactor = calcTimeDecayFactor(feed);
-
-                // calculate edge rank score
-                const affinity = await calculateAffinity(id.id, feed.user_id);
-
-                const edgeWeight = await calculateEdgeWeight(
-                    feedItem,
-                    id.id,
-                    feedItem.id
-                );
-
                 // add score attribute to feedItem
-                feed.edge_rank_score = calcEdgeRankScore(
-                    affinity,
-                    edgeWeight,
-                    timeDecayFactor
-                );
-
-                // add latest comments, photo_urls and mentioned_users to feedItem
-                feed.latest_comments = latestComments || [];
-                feed.mentioned_users = feedMentionedUsersTable[feed.id] || [];
-                feed.photo_count = feedPhotoCountTable[feed.id] || 0;
-                feed.tags = feedTagsTable[feed.id] || [];
-
+                feed.edge_rank_score = await calcEdgeRankScore(feed, id.id);
                 // enqueue feedItem to newsfeedBulkTable[id.id]
                 newsfeedBulkTable[id.id].push(feed);
             }
@@ -89,7 +48,10 @@ const initialization = async () => {
                 let feedItem = newsfeedBulkTable[id.id][i];
                 await redisClient.RPUSH(
                     JSON.stringify(id.id),
-                    JSON.stringify(feedItem)
+                    JSON.stringify({
+                        id: feedItem.id,
+                        edge_rank_score: feedItem.edge_rank_score,
+                    })
                 );
             }
             const endTime = Date.now();
