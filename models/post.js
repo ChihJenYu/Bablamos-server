@@ -54,6 +54,7 @@ class Post extends Edge {
         const conn = await db.pool.getConnection();
         try {
             await conn.query("START TRANSACTION");
+
             if (this.id) {
                 const postTagsArray = this.tags.map((tag) => {
                     return [this.id, tag.tag_id];
@@ -78,25 +79,36 @@ class Post extends Edge {
                         this.photo_count,
                     ]
                 );
+
                 // update post_tag
+                await conn.query("DELETE FROM post_tag WHERE post_id = ?", [
+                    this.id,
+                ]);
                 if (postTagsArray.length > 0) {
                     await conn.query(
-                        "DELETE FROM post_tag WHERE post_id = ?; INSERT INTO post_tag (post_id, tag_id) VALUES ?",
-                        [this.id, postTagsArray]
+                        "INSERT INTO post_tag (post_id, tag_id) VALUES ?",
+                        [postTagsArray]
                     );
                 }
                 // update post_audience_list
+                await conn.query(
+                    "DELETE FROM post_post_audience_list WHERE post_id = ?",
+                    [this.id]
+                );
                 if (postAudienceArray.length > 0) {
                     await conn.query(
-                        "DELETE FROM post_audience_list WHERE post_id = ?; INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
-                        [this.id, postAudienceArray]
+                        "INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
+                        [postAudienceArray]
                     );
                 }
                 // update mention_user table
+                await conn.query("DELETE FROM mention_user WHERE post_id = ?", [
+                    this.id,
+                ]);
                 if (postMentionsArray.length > 0) {
                     await conn.query(
-                        "DELETE FROM mention_user WHERE post_id = ?; INSERT INTO mention_user (post_id, user_id) VALUES ?",
-                        [this.id, postMentionsArray]
+                        "INSERT INTO mention_user (post_id, user_id) VALUES ?",
+                        [postMentionsArray]
                     );
                 }
             } else {

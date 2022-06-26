@@ -155,7 +155,7 @@ const getNewsfeed = async (req, res) => {
         // not within range
         if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
             const { data } = await newsfeed.get(
-                `?at=${whichPage}&user-id=${userAsking}&paging=${Math.floor(
+                `?user-id=${userAsking}&paging=${Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 )}`
             );
@@ -173,7 +173,7 @@ const getNewsfeed = async (req, res) => {
                 NEWSFEED_PER_PAGE_FOR_CLIENT -
                 (NEWSFEED_PER_PAGE_FOR_WEB_SERVER - localIndexToStart);
             const { data } = await newsfeed.get(
-                `?at=${whichPage}&user-id=${userAsking}&paging=${Math.floor(
+                `?user-id=${userAsking}&paging=${Math.floor(
                     requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
                 )}`
             );
@@ -195,7 +195,7 @@ const getNewsfeed = async (req, res) => {
 
         // add author profile_pic_url and commentor
         for (let i = 0; i < newsfeedToReturn.length; i++) {
-            const feedId = newsfeedToReturn[i].id;
+            const feedId = newsfeedToReturn[i].post_id;
             const feedContent = await Feed.getFeedDetail(feedId, userAsking);
             feedContent.profile_pic_url = User.generatePictureUrl({
                 has_profile: feedContent.user_profile_pic == 1,
@@ -422,13 +422,25 @@ const dropFollowers = async (req, res) => {
     res.sendStatus(200);
 };
 
-// /user/read?post-id=
+// /user/read?type=&post-id=
 const readPost = (req, res) => {
     const user_id = req.user.id;
-    const post_id = req.query["post-id"];
-    newsfeed.post(`/update/recalc?user-id=${user_id}&post-id=${post_id}`);
-    console.log("Firing recalc request");
-    res.sendStatus(200);
+    const type = req.query.type;
+    if (type === "new") {
+        // recalculation of new posts
+        newsfeed.post(`/update/recalc?type=new&user-id=${user_id}`, {
+            posts: req.body.posts,
+        });
+        console.log("Firing recalc request, type: reading fresh posts");
+        res.sendStatus(200);
+    } else if (type === "read") {
+        // recalculation of read posts
+        newsfeed.post(`/update/recalc?type=read&user-id=${user_id}`, {
+            posts: req.body.posts,
+        });
+        console.log("Firing recalc request, type: incrementing post views");
+        res.sendStatus(200);
+    }
 };
 
 module.exports = {

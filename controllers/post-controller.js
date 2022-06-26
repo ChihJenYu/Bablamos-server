@@ -31,11 +31,9 @@ const createPost = async (req, res) => {
     // call NFGS to update all newsfeeds of all followers of this user
     const UPDATE_METHOD = "write";
 
-    newsfeed.post(`/update?method=${UPDATE_METHOD}&user-id=${user_id}`, {
-        username,
-        profile_pic_url,
-        ...newPost,
-    });
+    newsfeed.post(
+        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${newPost.id}`
+    );
 };
 
 const editPost = async (req, res) => {
@@ -49,7 +47,7 @@ const editPost = async (req, res) => {
     //     tags: [{tag_id: 1, tag_name: 'nodejs'}],
     //     mentioned_users: undefined,
     // }
-    const photo_count = req.files.length;
+    const photo_count = req.files ? req.files.length : 0;
     const post_id = req.post_id;
     const { id: user_id } = req.user;
     const postData = req.body;
@@ -71,9 +69,9 @@ const editPost = async (req, res) => {
 
     // locate edge in each follower's feed list and replace with the updated edge
     const UPDATE_METHOD = "write";
-    newsfeed.patch(`/update?method=${UPDATE_METHOD}&user-id=${user_id}`, {
-        ...newPost,
-    });
+    newsfeed.patch(
+        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${+post_id}`
+    );
 };
 
 const deletePost = async (req, res) => {
