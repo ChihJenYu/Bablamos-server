@@ -99,7 +99,7 @@ const initialization = async () => {
         console.log(
             `Total time elapsed: ${
                 insertCompleteTime - beginTime
-            }\n-----------------------------------------`
+            }ms\n-----------------------------------------`
         );
     }
 };
