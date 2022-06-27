@@ -19,7 +19,8 @@ const initialization = async () => {
 
     const affinityTableStartTime = Date.now();
     console.log("Fetching user affinity table...");
-    const userAffinityTable = await generateUserAffinityTable();
+    // const userAffinityTable = await generateUserAffinityTable();
+    const userAffinityTable = { 1: { 2: 3, 3: 4 } };
     const affinityTableCompleteTime = Date.now();
     console.log(
         `Generating user affinity table took ${
@@ -44,11 +45,11 @@ const initialization = async () => {
             feedToInsert.comment_score = calculateCommentScore(
                 feed.comment_count
             );
-            feedToInsert.share_count = calculateShareScore(feed.share_count);
+            feedToInsert.share_score = calculateShareScore(feed.share_count);
             feedToInsert.popularity = calculatePopularity(
                 feed.like_score,
                 feed.comment_score,
-                feed.share_sc
+                feed.share_score
             );
             feedToInsert.time_decay_factor = calculateTimeDecayFactor(feed);
             feedToInsert.views = 0;
@@ -58,6 +59,7 @@ const initialization = async () => {
                 feed.time_decay_factor,
                 feed.views
             );
+
             feedsToInsert.push(feedToInsert);
         }
         const edgeRankCalculationCompleteTime = Date.now();
