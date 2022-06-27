@@ -46,17 +46,18 @@ const initialization = async () => {
             );
             feedToInsert.share_score = calculateShareScore(feed.share_count);
             feedToInsert.popularity = calculatePopularity(
-                feed.like_score,
-                feed.comment_score,
-                feed.share_score
+                feedToInsert.like_score,
+                feedToInsert.comment_score,
+                feedToInsert.share_score
             );
+            feedToInsert.created_at = feed.created_at;
             feedToInsert.time_decay_factor = calculateTimeDecayFactor(feed);
             feedToInsert.views = 0;
             feedToInsert.edge_rank_score = calcEdgeRankScore(
-                feed.affinity,
-                feed.edge_weight,
-                feed.time_decay_factor,
-                feed.views
+                feedToInsert.affinity,
+                feedToInsert.edge_weight,
+                feedToInsert.time_decay_factor,
+                feedToInsert.views
             );
 
             feedsToInsert.push(feedToInsert);

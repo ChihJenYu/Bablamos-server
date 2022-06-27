@@ -371,18 +371,6 @@ const generateUserAffinityTable = async () => {
     return userAffinityTable;
 };
 
-const calculateIndividualAffinity = async (my_user_id, other_user_id) => {
-    const outgoing = await calcOutgoingLikesOnUserEventfulEdge(
-        my_user_id,
-        other_user_id
-    );
-    const incoming = await calcIncomingLikesOnMyEventfulEdge(
-        my_user_id,
-        other_user_id
-    );
-    return LIKE_WEIGHT * (outgoing * 4 + incoming * 2);
-};
-
 const calcAvgWeightOnEventfulEdge = async (my_user_id, post_id) => {
     const [averageWeightOnEventfulEdge] = await db.pool.query(
         `select avg(parent.weight) as avg_weight from (

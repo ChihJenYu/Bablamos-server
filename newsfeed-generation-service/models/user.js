@@ -11,6 +11,30 @@ const UserSchema = mongoose.Schema({
                 type: Number,
                 required: true,
             },
+            affinity: {
+                type: Number,
+            },
+            edge_weight: {
+                type: Number,
+            },
+            like_score: {
+                type: Number,
+            },
+            comment_score: {
+                type: Number,
+            },
+            share_score: {
+                type: Number,
+            },
+            popularity: {
+                type: Number,
+            },
+            time_decay_factor: {
+                type: Number,
+            },
+            created_at: {
+                type: Number,
+            },
             edge_rank_score: {
                 type: Number,
             },

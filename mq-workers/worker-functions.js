@@ -6,6 +6,7 @@ const {
 const User = require("../models/user");
 const Feed = require("../models/feed");
 
+// update user's affinity list and score in each newsfeed item
 const recalcAffinityTable = async () => {
     console.log("Begin recalculating user affinity table");
     const beginTime = Date.now();
@@ -48,6 +49,7 @@ const recalcAffinityTable = async () => {
 };
 
 // if % 10 == 0 then update
+// update 
 const checkLikeCount = async (post_id) => {
     const { user_id, like_count } = await Feed.getPopularity({
         post_id,
