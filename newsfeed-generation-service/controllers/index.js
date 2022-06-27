@@ -1,6 +1,12 @@
 const Feed = require("../../models/feed");
-const { getUserIds, calcEdgeRankScore } = require("../models");
+const {
+    getUserIds,
+    calcEdgeRankScore,
+    calculateTimeDecayFactor,
+} = require("../models");
 const User = require("../models/user");
+const Post = require("../../models/post");
+
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 
 const getNewsfeed = async (req, res) => {

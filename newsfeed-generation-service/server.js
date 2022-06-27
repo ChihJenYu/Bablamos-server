@@ -14,7 +14,7 @@ server.listen(NFGS_PORT, async () => {
     });
 
     // send 'recalcTimeDecayFactor' job to updaterJobQueue every 5 minutes
-    const recalcTimeDecayFactor = schedule.scheduleJob("*/5 * * * *", () => {
+    const recalcTimeDecayFactor = schedule.scheduleJob("* * * * * *", () => {
         updaterJobQueue.add({ function: "recalcTimeDecayFactor" });
     });
 

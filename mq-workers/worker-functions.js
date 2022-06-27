@@ -8,7 +8,7 @@ const {
     calculateShareScore,
     calculateTimeDecayFactor,
 } = require("../newsfeed-generation-service/models");
-const User = require("../models/user");
+const User = require("../newsfeed-generation-service/models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
 
@@ -38,7 +38,7 @@ const recalcAffinityTable = async () => {
                 {
                     $set: {
                         "newsfeed.$.affinity":
-                            userAffinityTable[userId][otherUserId] || 0,
+                            userAffinityTable[user][otherUser] || 0,
                     },
                 },
                 { new: true }
@@ -85,7 +85,7 @@ const recalcAffinityTable = async () => {
                 }
             );
 
-            if (!userAffinityTable[userId][otherUserId]) {
+            if (!userAffinityTable[user][otherUser]) {
                 continue;
             }
             userAffinityList.push({
@@ -156,7 +156,7 @@ const recalcTimeDecayFactor = async () => {
             // remove from document where newsfeed element's user_id = user
             await User.updateOne(
                 {
-                    user_id: user,
+                    user_id: followerId,
                 },
                 {
                     $pull: {
@@ -170,7 +170,7 @@ const recalcTimeDecayFactor = async () => {
             // add in new newsfeed element with updated edge rank score
             await User.updateOne(
                 {
-                    user_id: user,
+                    user_id: followerId,
                 },
                 {
                     $push: {
