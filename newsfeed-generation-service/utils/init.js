@@ -19,8 +19,7 @@ const initialization = async () => {
 
     const affinityTableStartTime = Date.now();
     console.log("Fetching user affinity table...");
-    // const userAffinityTable = await generateUserAffinityTable();
-    const userAffinityTable = { 1: { 2: 3, 3: 4 } };
+    const userAffinityTable = await generateUserAffinityTable();
     const affinityTableCompleteTime = Date.now();
     console.log(
         `Generating user affinity table took ${
