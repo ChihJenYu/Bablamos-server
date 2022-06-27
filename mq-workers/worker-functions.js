@@ -14,7 +14,7 @@ const Post = require("../models/post");
 
 // update user's affinity list and score in each newsfeed item
 const recalcAffinityTable = async () => {
-    console.log("Begin recalculating user affinity table");
+    console.log("Begin job: recalculating user affinity table");
     const beginTime = Date.now();
     const userAffinityTable = await generateUserAffinityTable();
     const affinityTableCompleteTime = Date.now();
@@ -102,17 +102,24 @@ const recalcAffinityTable = async () => {
             }
         );
     }
+    const completeTime = Date.now();
     console.log(
         `Updating user affinity in Mongo took ${
-            Date.now() - affinityTableCompleteTime
-        }ms`
+            completeTime - affinityTableCompleteTime
+        }ms for ${Object.keys(userAffinityTable)} users (${
+            (completeTime - affinityTableCompleteTime) /
+            Object.keys(userAffinityTable)
+        }ms per user)\n-----------------------------------------`
     );
 };
 
 const recalcTimeDecayFactor = async () => {
+    console.log("Begin job: recalculating time decay factor");
     // harder for sharding based on user id?
     const allPostIds = await Post.find(["id", "user_id", "created_at"]);
+    const beginTime = Date.now();
     for (let post of allPostIds) {
+        const postBeginTime = Date.now();
         const { id, user_id, created_at } = post;
         const timeDecayFactor = calculateTimeDecayFactor({ created_at });
         let allFollowerIds = await getUserIds({
@@ -177,11 +184,25 @@ const recalcTimeDecayFactor = async () => {
                 }
             );
         }
+        console.log(
+            `Updating time decay factor and edge rank score of post #${post} in all followers took ${
+                Date.now() - postBeginTime
+            }ms`
+        );
     }
+    console.log(
+        `Total time elapsed: ${
+            Date.now() - beginTime
+        }ms\n-----------------------------------------`
+    );
 };
 
 // type: ["like", "comment", "share"]
 const checkPopCount = async ({ post_id, type }) => {
+    console.log(
+        `Begin job: recalculating popularity and edge rank score for post #${post_id}`
+    );
+    const beginTime = Date.now();
     const data = await Feed.getPopularity({
         post_id,
         metric: type,
@@ -215,6 +236,7 @@ const checkPopCount = async ({ post_id, type }) => {
     });
     allFollowerIds = allFollowerIds.map((id) => id.id);
 
+    const postBeginTime = Date.now();
     // recalculate score
     for (followerId of allFollowerIds) {
         // update these users' newsfeed item like_score, popularity, edge_weight, edge_rank_score and sort
@@ -311,6 +333,20 @@ const checkPopCount = async ({ post_id, type }) => {
             }
         );
     }
+
+    const postEndTime = Date.now();
+    console.log(
+        `Updating popularity and edge rank score for post #${post_id} took ${
+            postEndTime - postBeginTime
+        }ms for ${allFollowerIds.length} users (${
+            (postEndTime - postBeginTime) / allFollowerIds.length.length
+        }ms per user)`
+    );
+    console.log(
+        `Total time elapsed: ${
+            Date.now() - beginTime
+        }ms\n-----------------------------------------`
+    );
 };
 
 const test = () => {
