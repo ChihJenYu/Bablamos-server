@@ -16,6 +16,6 @@ updaterJobQueue.process(async (job, done) => {
     done();
 });
 
-jobQueue.on("completed", () => {
-    jobQueue.clean(1000);
+updaterJobQueue.on("completed", () => {
+    updaterJobQueue.clean(1000);
 });
