@@ -2,6 +2,7 @@ const { generateUserAffinityTable } = require("../models");
 const User = require("../models/user");
 
 const recalcAffinityTable = async () => {
+    console.log("Begin recalculating user affinity table");
     const beginTime = Date.now();
     const userAffinityTable = await generateUserAffinityTable();
     const affinityTableCompleteTime = Date.now();
@@ -12,7 +13,7 @@ const recalcAffinityTable = async () => {
     );
     const allUsers = Object.keys(userAffinityTable);
     for (let user of allUsers) {
-        user = +user; // user_id
+        user = +user;
         let userAffinityList = [];
         const otherUsers = Object.keys(userAffinityTable[user]);
         for (let otherUser of otherUsers) {
@@ -31,9 +32,11 @@ const recalcAffinityTable = async () => {
             }
         );
     }
-    return `Updating user affinity in Mongo took ${
-        Date.now() - affinityTableCompleteTime
-    }ms`;
+    console.log(
+        `Updating user affinity in Mongo took ${
+            Date.now() - affinityTableCompleteTime
+        }ms`
+    );
 };
 
 module.exports = { recalcAffinityTable };

@@ -12,8 +12,7 @@ const updaterJobQueue = new Queue("updater-job-queue", {
 });
 
 updaterJobQueue.process(async (job, done) => {
-    const result = await updaterFunctions[job.data.function]();
-    console.log(result);
+    await updaterFunctions[job.data.function]();
     done();
 });
 
