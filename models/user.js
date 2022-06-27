@@ -353,8 +353,9 @@ class User {
         return true;
     }
 
-    static async like({ type, user_id, edge_id, edge_type }) {
-        const edgeType = edge_type === "eventful_edge" ? "post" : "comment";
+    static async like({ type, user_id, post_id, comment_id }) {
+        const edgeType = post_id ? "post" : "comment";
+        const edge_id = post_id ? post_id : comment_id;
         if (type === "like") {
             await db.pool.query(
                 `INSERT INTO like_user (${edgeType}_id, user_id) VALUES (?, ?)

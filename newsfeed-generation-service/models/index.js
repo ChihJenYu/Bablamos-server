@@ -396,20 +396,18 @@ const calcAvgWeightOnEventfulEdge = async (my_user_id, post_id) => {
     return averageWeight;
 };
 
+const calculateLikeScore = (lc) => lc;
+
+const calculateCommentScore = (cc) => 2 * cc;
+
+const calculateShareScore = (sc) => 3 * sc;
+
+const calculatePopularity = (ls, cs, ss) => POP_WEIGHT * (ls + cs + ss);
+
 const calculateEdgeWeight = async (feed, my_user_id) => {
     // EDGE WEIGHT
     // edge type
     const edgeTypeScore = feed.shared_post_id ? 3 : 4;
-
-    // pop weight
-    // like count of this feedItem
-    const likeCount = feed.like_count;
-
-    // comment count of this feedItem
-    const commentCount = feed.comment_count;
-
-    // share count of this feedItem
-    const shareCount = feed.share_count;
 
     // average edge tag weight of this user for this feed item
     const averageWeight = await calcAvgWeightOnEventfulEdge(
@@ -419,7 +417,10 @@ const calculateEdgeWeight = async (feed, my_user_id) => {
 
     return (
         EDGE_TYPE_WEIGHT * edgeTypeScore +
-        POP_WEIGHT * (shareCount * 3 + commentCount * 2 + likeCount * 1) +
+        POP_WEIGHT *
+            (calculateLikeScore(feed.like_count) +
+                calculateCommentScore(feed.comment_count) +
+                calculateShareScore(feed.share_count)) +
         EDGE_TAG_WEIGHT * averageWeight
     );
 };
@@ -462,6 +463,10 @@ const calcEdgeRankScore = (af, ew, td, v) =>
 module.exports = {
     getUserIds,
     generateUserAffinityTable,
+    calculateLikeScore,
+    calculateCommentScore,
+    calculateShareScore,
+    calculatePopularity,
     calculateEdgeWeight,
     calculateTimeDecayFactor,
     calcEdgeRankScore,

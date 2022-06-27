@@ -1,5 +1,6 @@
 const Post = require("../models/post");
 const newsfeed = require("../apis/newsfeed");
+const { popularityCalculatorJobQueue } = require("../mq/");
 const createPost = async (req, res) => {
     // request body:
     // {
@@ -34,6 +35,13 @@ const createPost = async (req, res) => {
     newsfeed.post(
         `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${newPost.id}`
     );
+
+    if (newPost.shared_post_id) {
+        popularityCalculatorJobQueue.add({
+            function: "checkShareCount",
+            post_id: "" + newPost.shared_post_id,
+        });
+    }
 };
 
 const editPost = async (req, res) => {
@@ -77,7 +85,7 @@ const editPost = async (req, res) => {
 const deletePost = async (req, res) => {
     const user_id = req.user.id;
     const post_id = req.post_id;
-    await Post.delete(post_id);
+    const deletedPost = await Post.delete(post_id);
 
     res.status(200).send({ id: post_id });
 
@@ -90,6 +98,12 @@ const deletePost = async (req, res) => {
     newsfeed.delete(
         `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${post_id}`
     );
+    if (deletedPost.shared_post_id) {
+        popularityCalculatorJobQueue.add({
+            function: "checkShareCount",
+            post_id: "" + deletedPost.shared_post_id,
+        });
+    }
 };
 
 module.exports = { createPost, editPost, deletePost };

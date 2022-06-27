@@ -1,5 +1,6 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
+const { popularityCalculatorJobQueue } = require("../mq/");
 const redisClient = require("../redis");
 const newsfeed = require("../apis/newsfeed");
 const aws = require("aws-sdk");
@@ -273,8 +274,6 @@ const getUserInfo = async (req, res) => {
             0
         );
 
-        console.log(userAsking, userInQuestion);
-
         let {
             user_info,
             username,
@@ -313,26 +312,33 @@ const getUserInfo = async (req, res) => {
 };
 
 // request body contains {edge_id, edge_type}
+// after each like changes, send 'checkLikeCount' job to affinityCalculatorJobQueue
 const userLikesEdge = async (req, res) => {
     const id = req.user.id;
-    const { edge_id, edge_type } = req.body;
+    const { post_id, comment_id } = req.body;
     if (req.method === "POST") {
         // like
         await User.like({
             type: "like",
             user_id: id,
-            edge_id,
-            edge_type,
+            post_id,
+            comment_id,
         });
         res.sendStatus(201);
     } else if (req.method === "DELETE") {
         await User.like({
             type: "unlike",
             user_id: id,
-            edge_id,
-            edge_type,
+            post_id,
+            comment_id,
         });
         res.sendStatus(204);
+    }
+    if (post_id) {
+        popularityCalculatorJobQueue.add({
+            function: "checkLikeCount",
+            post_id: "" + post_id,
+        });
     }
 };
 

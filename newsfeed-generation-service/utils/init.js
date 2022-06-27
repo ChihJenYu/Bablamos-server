@@ -1,5 +1,9 @@
 const {
     generateUserAffinityTable,
+    calculateLikeScore,
+    calculateCommentScore,
+    calculateShareScore,
+    calculatePopularity,
     calculateEdgeWeight,
     calculateTimeDecayFactor,
     calcEdgeRankScore,
@@ -28,18 +32,32 @@ const initialization = async () => {
         const beginTime = Date.now();
         userId = +userId;
         let allFeeds = await Feed.findByViewer(userId);
+        let feedsToInsert = [];
         for (let i = 0; i < allFeeds.length; i++) {
             let feed = allFeeds[i];
-            feed.affinity = userAffinityTable[userId][feed.user_id] || 0;
-            feed.edge_weight = await calculateEdgeWeight(feed, userId);
-            feed.time_decay_factor = calculateTimeDecayFactor(feed);
-            feed.views = 0;
-            feed.edge_rank_score = calcEdgeRankScore(
+            let feedToInsert = {};
+            feedToInsert.affinity =
+                userAffinityTable[userId][feed.user_id] || 0;
+            feedToInsert.edge_weight = await calculateEdgeWeight(feed, userId);
+            feedToInsert.like_score = calculateLikeScore(feed.like_count);
+            feedToInsert.comment_score = calculateCommentScore(
+                feed.comment_count
+            );
+            feedToInsert.share_count = calculateShareScore(feed.share_count);
+            feedToInsert.popularity = calculatePopularity(
+                feed.like_score,
+                feed.comment_score,
+                feed.share_sc
+            );
+            feedToInsert.time_decay_factor = calculateTimeDecayFactor(feed);
+            feedToInsert.views = 0;
+            feedToInsert.edge_rank_score = calcEdgeRankScore(
                 feed.affinity,
                 feed.edge_weight,
                 feed.time_decay_factor,
                 feed.views
             );
+            feedsToInsert.push(feedToInsert);
         }
         const edgeRankCalculationCompleteTime = Date.now();
         console.log(
@@ -47,17 +65,7 @@ const initialization = async () => {
                 edgeRankCalculationCompleteTime - beginTime
             }ms`
         );
-        allFeeds = allFeeds.map((feed) => {
-            return {
-                post_id: feed.id,
-                edge_rank_score: feed.edge_rank_score,
-                affinity: feed.affinity,
-                edge_weight: feed.edge_weight,
-                time_decay_factor: feed.time_decay_factor,
-                views: feed.views,
-            };
-        });
-        allFeeds.sort((f1, f2) => f2.edge_rank_score - f1.edge_rank_score);
+        feedsToInsert.sort((f1, f2) => f2.edge_rank_score - f1.edge_rank_score);
 
         // user's affinity with other users
         let affinityList = [];
@@ -78,15 +86,15 @@ const initialization = async () => {
                 findAffinityEndTime - findAffinityStartTime
             }ms for ${
                 Object.keys(userAffinityTable[userId]).length
-            } other-users (${
+            } users (${
                 (findAffinityEndTime - findAffinityStartTime) /
                 Object.keys(userAffinityTable[userId]).length
-            }ms per other-user)`
+            }ms per user)`
         );
         const insertBeginTime = Date.now();
         const newUser = new User({
             user_id: userId,
-            newsfeed: allFeeds,
+            newsfeed: feedsToInsert,
             affinity: affinityList,
         });
         await newUser.save();

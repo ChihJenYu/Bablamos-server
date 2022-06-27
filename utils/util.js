@@ -1,5 +1,4 @@
 const multer = require("multer");
-const aws = require("aws-sdk");
 
 const multerMiddleware = (input_name_attr) =>
     multer({ dest: null }).single(input_name_attr);

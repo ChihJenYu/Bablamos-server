@@ -1,5 +1,5 @@
 const Comment = require("../models/comment");
-
+const { popularityCalculatorJobQueue } = require("../mq/");
 const createComment = async (req, res) => {
     const post_id = req.query["post-id"];
     const user_id = req.user.id;
@@ -26,6 +26,10 @@ const createComment = async (req, res) => {
         profile_pic_url: req.user.profile_pic_url,
         photo_count: newComment.photo_count,
         created_at: newComment.created_at,
+    });
+    popularityCalculatorJobQueue.add({
+        function: "checkCommentCount",
+        post_id: "" + post_id,
     });
 };
 
@@ -64,6 +68,10 @@ const deleteComment = async (req, res) => {
     const comment_id = req.comment_id;
     await Comment.delete(comment_id);
     res.status(200).send({ id: comment_id });
+    popularityCalculatorJobQueue.add({
+        function: "checkCommentCount",
+        post_id: "" + post_id,
+    });
 };
 
 module.exports = { createComment, editComment, deleteComment };

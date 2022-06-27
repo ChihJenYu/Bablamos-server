@@ -16,7 +16,7 @@ const updaterJobQueue = new Queue("updater-job-queue", {
 server.listen(NFGS_PORT, async () => {
     console.log(`Listening on port: ${NFGS_PORT}`);
 
-    // send 'recalculate-affinity' job to bull every 12 hours
+    // send 'recalculateAffinity' job to updaterJobQueue every 12 hours
     const job = schedule.scheduleJob("* */12 * * *", () => {
         updaterJobQueue.add({ function: "recalcAffinityTable" });
     });
