@@ -396,7 +396,7 @@ const calcAvgWeightOnEventfulEdge = async (my_user_id, post_id) => {
     return averageWeight;
 };
 
-const calculateEdgeWeight = async (feed, my_user_id, post_id) => {
+const calculateEdgeWeight = async (feed, my_user_id) => {
     // EDGE WEIGHT
     // edge type
     const edgeTypeScore = feed.shared_post_id ? 3 : 4;
@@ -414,7 +414,7 @@ const calculateEdgeWeight = async (feed, my_user_id, post_id) => {
     // average edge tag weight of this user for this feed item
     const averageWeight = await calcAvgWeightOnEventfulEdge(
         my_user_id,
-        post_id
+        feed.id
     );
 
     return (
@@ -446,18 +446,23 @@ const calculateAlreadySeenFactor = (views) => {
     return Math.pow(1.25, views);
 };
 
-const calcEdgeRankScore = async ({ affinity, feed, my_user_id, views }) => {
-    const affinityUsed =
-        affinity ||
-        (await calculateIndividualAffinity(my_user_id, feed.userid));
-    let edgeWeight = await calculateEdgeWeight(feed, my_user_id, feed.id);
-    let timeDecayFactor = calculateTimeDecayFactor(feed);
-    let alreadySeenFactor = calculateAlreadySeenFactor(views);
-    return (affinityUsed + edgeWeight) / timeDecayFactor / alreadySeenFactor;
-};
+const calcEdgeRankScore = (af, ew, td, v) =>
+    (af + ew) / td / calculateAlreadySeenFactor(v);
+
+// const calcEdgeRankScore = async ({ affinity, feed, my_user_id, views }) => {
+//     const affinityUsed =
+//         affinity ||
+//         (await calculateIndividualAffinity(my_user_id, feed.userid));
+//     let edgeWeight = await calculateEdgeWeight(feed, my_user_id, feed.id);
+//     let timeDecayFactor = calculateTimeDecayFactor(feed);
+//     let alreadySeenFactor = calculateAlreadySeenFactor(views);
+//     return (affinityUsed + edgeWeight) / timeDecayFactor / alreadySeenFactor;
+// };
 
 module.exports = {
     getUserIds,
     generateUserAffinityTable,
+    calculateEdgeWeight,
+    calculateTimeDecayFactor,
     calcEdgeRankScore,
 };
