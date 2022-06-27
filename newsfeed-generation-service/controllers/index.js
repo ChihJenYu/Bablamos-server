@@ -5,13 +5,13 @@ const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 
 const getNewsfeed = async (req, res) => {
     const userId = +req.query["user-id"];
-    const paging = +req.query.paging;
+    const from = +req.query.from;
     const user = await User.findOne(
         { user_id: userId },
         {
             newsfeed: {
                 $slice: [
-                    NEWSFEED_PER_PAGE_FOR_WEB_SERVER * paging,
+                    from,
                     NEWSFEED_PER_PAGE_FOR_WEB_SERVER,
                 ],
             },

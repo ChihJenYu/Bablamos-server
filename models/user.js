@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const validator = require("validator");
 const jwt = require("jsonwebtoken");
 const SALT_ROUNDS = 10;
-const JWT_EXPIRE = 86400;
+const JWT_EXPIRE = "365d";
 const CLOUDFRONT_DOMAIN_NAME = "https://d3h0a68hsbn5ed.cloudfront.net";
 const DEFAULT_FRIENDS_PAGE_SIZE = 20;
 const PROFILE_FRIENDS_PAGE_SIZE = 9;
@@ -154,6 +154,7 @@ class User {
     }
 
     // action = ('accept','send','receive')
+    // auto-follows upon friend accept
     static async befriend({
         outgoing_user_id,
         friend_userid,
@@ -176,28 +177,59 @@ class User {
                 friendStatus = "received";
                 break;
         }
+        let args = [
+            outgoing_user_id,
+            friend_userid,
+            outgoingStatus,
+            outgoingStatus,
+            friend_userid,
+            outgoing_user_id,
+            friendStatus,
+            friendStatus,
+        ];
+        if (outgoingStatus === "accepted") {
+            args = args.concat([
+                outgoing_user_id,
+                friend_userid,
+                friend_userid,
+                friend_userid,
+                outgoing_user_id,
+                outgoing_user_id,
+            ]);
+        }
         await db.pool.query(
             `INSERT INTO friendship (user_id, friend_userid, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = ?;
-            INSERT INTO friendship (user_id, friend_userid, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = ?`,
-            [
-                outgoing_user_id,
-                friend_userid,
-                outgoingStatus,
-                outgoingStatus,
-                friend_userid,
-                outgoing_user_id,
-                friendStatus,
-                friendStatus,
-            ]
+            INSERT INTO friendship (user_id, friend_userid, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = ?;
+            ${
+                outgoingStatus === "accepted"
+                    ? `INSERT INTO followship (user_id, following_userid) VALUES (?, ?) ON DUPLICATE KEY UPDATE following_userid = ?; 
+                    INSERT INTO followship (user_id, following_userid) VALUES (?, ?) ON DUPLICATE KEY UPDATE following_userid = ?;`
+                    : ""
+            }`,
+            args
         );
         return true;
     }
 
+    // auto-drop follows
     static async unfriend({ outgoing_user_id, friend_userid }) {
         await db.pool.query(
             `DELETE FROM friendship WHERE user_id = ? AND friend_userid = ?;
-            DELETE FROM friendship WHERE user_id = ? AND friend_userid = ?`,
-            [outgoing_user_id, friend_userid, friend_userid, outgoing_user_id]
+            DELETE FROM friendship WHERE user_id = ? AND friend_userid = ?;
+            DELETE FROM followship WHERE user_id = ? AND following_userid = ? AND EXISTS (SELECT * FROM user WHERE id = ? AND allow_stranger_follow = 0);
+            DELETE FROM followship WHERE user_id = ? AND following_userid = ? AND EXISTS (SELECT * FROM user WHERE id = ? AND allow_stranger_follow = 0);`,
+            [
+                outgoing_user_id,
+                friend_userid,
+                friend_userid,
+                outgoing_user_id,
+                outgoing_user_id,
+                friend_userid,
+                friend_userid,
+                friend_userid,
+                outgoing_user_id,
+                outgoing_user_id,
+            ]
         );
         return true;
     }
@@ -212,7 +244,7 @@ class User {
         let [result] = await db.pool.query(
             `SELECT f.friend_userid as id, u.username as friend_name, u.user_profile_pic, u.allow_stranger_follow FROM friendship f
             JOIN user u on f.friend_userid = u.id
-            ${whereClause} ${at_profile ? "ORDER BY id DESC" : ""} LIMIT ?, ?`,
+            ${whereClause} ORDER BY id DESC LIMIT ?, ?`,
             [
                 ...args,
                 at_profile
@@ -235,11 +267,17 @@ class User {
         return result;
     }
 
-    // user info and friend count
+    // user info, allow_stranger_follow, friend_status, follow_status and friend count
     static async getUserInfo({ user_asking, user_in_question }) {
         const [result] = await db.pool.query(
             `select u.info as user_info, u.user_profile_pic, u.username, count(f.friend_userid) as friend_count,
-            fsv.status as friend_status
+            fsv.status as friend_status, 
+            case when
+                fls.following_userid is null
+                then 0
+                else 1
+                end as follow_status, 
+            u.allow_stranger_follow
             from user u 
             join friendship f on u.id = f.user_id
             left join 
@@ -247,9 +285,20 @@ class User {
                 select status, user_id, friend_userid from friendship where user_id = ? and friend_userid = ?
             ) fsv
             on f.user_id = fsv.friend_userid
+            left join 
+            (
+                select user_id, following_userid from followship where user_id = ? and following_userid = ?
+            ) fls
+            on f.user_id = fls.following_userid
             where u.id = ?
             group by u.id`,
-            [user_asking, user_in_question, user_in_question]
+            [
+                user_asking,
+                user_in_question,
+                user_asking,
+                user_in_question,
+                user_in_question,
+            ]
         );
         return result[0];
     }

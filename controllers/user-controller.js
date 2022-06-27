@@ -155,9 +155,7 @@ const getNewsfeed = async (req, res) => {
         // not within range
         if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
             const { data } = await newsfeed.get(
-                `?user-id=${userAsking}&paging=${Math.floor(
-                    requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
-                )}`
+                `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
 
             userTempNewsfeedStorage[userAsking] = data.data;
@@ -165,31 +163,21 @@ const getNewsfeed = async (req, res) => {
                 0,
                 NEWSFEED_PER_PAGE_FOR_CLIENT
             );
+            redisClient.set(
+                "NFGS_start_index_for_temp_storage_user_" + userAsking,
+                requestedStartIndex
+            );
         } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
         } else {
-            newsfeedToReturn =
-                userTempNewsfeedStorage[userAsking].slice(localIndexToStart);
-            const newsfeedRequiredFromNFGS =
-                NEWSFEED_PER_PAGE_FOR_CLIENT -
-                (NEWSFEED_PER_PAGE_FOR_WEB_SERVER - localIndexToStart);
             const { data } = await newsfeed.get(
-                `?user-id=${userAsking}&paging=${Math.floor(
-                    requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
-                )}`
+                `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
 
             userTempNewsfeedStorage[userAsking] = data.data;
-            newsfeedToReturn = newsfeedToReturn.concat(
-                userTempNewsfeedStorage[userAsking].slice(
-                    0,
-                    newsfeedRequiredFromNFGS
-                )
-            );
+            newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
             redisClient.set(
                 "NFGS_start_index_for_temp_storage_user_" + userAsking,
-                Math.floor(
-                    requestedStartIndex / NEWSFEED_PER_PAGE_FOR_WEB_SERVER
-                ) * NEWSFEED_PER_PAGE_FOR_WEB_SERVER
+                requestedStartIndex
             );
         }
 
@@ -284,46 +272,40 @@ const getUserInfo = async (req, res) => {
             { user_id: userInQuestion, status: "accepted" },
             0
         );
-        const {
+        let {
             user_info,
             username,
             friend_count,
             user_profile_pic,
             friend_status,
+            follow_status,
+            allow_stranger_follow,
         } = await User.getUserInfo({
             user_asking: userAsking,
             user_in_question: userInQuestion,
         });
 
-        if (userAsking === userInQuestion) {
-            res.send({
-                user_id: userInQuestion,
-                user_info,
-                username,
-                profile_pic_url: User.generatePictureUrl({
-                    has_profile: user_profile_pic == 1,
-                    id: userInQuestion,
-                }),
-                friend_count,
-                recent_friends,
-                friend_status: "self",
-            });
-            return;
-        } else {
-            res.send({
-                user_id: userInQuestion,
-                user_info,
-                username,
-                profile_pic_url: User.generatePictureUrl({
-                    has_profile: user_profile_pic == 1,
-                    id: userInQuestion,
-                }),
-                friend_count,
-                recent_friends,
-                friend_status: friend_status || "stranger",
-            });
-            return;
+        if (userAsking == userInQuestion) {
+            friend_status = "self";
+        } else if (friend_status == null) {
+            friend_status = "stranger";
         }
+
+        res.send({
+            user_id: userInQuestion,
+            user_info,
+            username,
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: user_profile_pic == 1,
+                id: userInQuestion,
+            }),
+            friend_count,
+            recent_friends,
+            friend_status,
+            follow_status,
+            allow_stranger_follow,
+        });
+        return;
     }
 };
 
