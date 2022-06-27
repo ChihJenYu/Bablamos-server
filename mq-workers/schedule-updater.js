@@ -1,4 +1,4 @@
-const { updaterJobQueue } = require("../mq/");
+const { updaterJobQueue } = require("../mq");
 const workerFunctions = require("./worker-functions");
 
 updaterJobQueue.process(async (job, done) => {
