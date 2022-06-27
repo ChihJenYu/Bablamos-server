@@ -36,6 +36,7 @@ const initialization = async () => {
         for (let i = 0; i < allFeeds.length; i++) {
             let feed = allFeeds[i];
             let feedToInsert = {};
+            feedToInsert.post_id = feed.id;
             feedToInsert.affinity =
                 userAffinityTable[userId][feed.user_id] || 0;
             feedToInsert.edge_weight = await calculateEdgeWeight(feed, userId);
@@ -84,9 +85,7 @@ const initialization = async () => {
         console.log(
             `Finding affinity list took ${
                 findAffinityEndTime - findAffinityStartTime
-            }ms for ${
-                Object.keys(userAffinityTable[userId]).length
-            } users (${
+            }ms for ${Object.keys(userAffinityTable[userId]).length} users (${
                 (findAffinityEndTime - findAffinityStartTime) /
                 Object.keys(userAffinityTable[userId]).length
             }ms per user)`
