@@ -272,6 +272,9 @@ const getUserInfo = async (req, res) => {
             { user_id: userInQuestion, status: "accepted" },
             0
         );
+
+        console.log(userAsking, userInQuestion);
+
         let {
             user_info,
             username,

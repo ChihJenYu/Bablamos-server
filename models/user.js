@@ -279,7 +279,7 @@ class User {
                 end as follow_status, 
             u.allow_stranger_follow
             from user u 
-            join friendship f on u.id = f.user_id
+            left join friendship f on u.id = f.user_id
             left join 
             (
                 select status, user_id, friend_userid from friendship where user_id = ? and friend_userid = ?
@@ -300,6 +300,7 @@ class User {
                 user_in_question,
             ]
         );
+        console.log(result);
         return result[0];
     }
 
