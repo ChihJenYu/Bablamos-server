@@ -14,6 +14,7 @@ const initialization = async () => {
     console.log(`Clearing database took ${Date.now() - beginTime}ms`);
 
     const affinityTableStartTime = Date.now();
+    console.log("Fetching user affinity table...");
     const userAffinityTable = await generateUserAffinityTable();
     const affinityTableCompleteTime = Date.now();
     console.log(
@@ -30,7 +31,7 @@ const initialization = async () => {
         for (let i = 0; i < allFeeds.length; i++) {
             let feed = allFeeds[i];
             feed.affinity = userAffinityTable[userId][feed.user_id] || 0;
-            feed.edge_weight = calculateEdgeWeight(feed, userId);
+            feed.edge_weight = await calculateEdgeWeight(feed, userId);
             feed.time_decay_factor = calculateTimeDecayFactor(feed);
             feed.views = 0;
             feed.edge_rank_score = calcEdgeRankScore(
