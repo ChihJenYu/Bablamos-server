@@ -1,17 +1,9 @@
 require("dotenv").config();
-const Queue = require("bull");
 const server = require("./app");
 const { NFGS_PORT, REDIS_HOST, REDIS_PORT, REDIS_USER, REDIS_PASSWORD } =
     process.env;
 const schedule = require("node-schedule");
-const updaterJobQueue = new Queue("updater-job-queue", {
-    redis: {
-        host: REDIS_HOST,
-        port: REDIS_PORT,
-        username: REDIS_USER,
-        password: REDIS_PASSWORD,
-    },
-});
+const { updaterJobQueue, popularityCalculatorJobQueue } = require("../mq/");
 
 server.listen(NFGS_PORT, async () => {
     console.log(`Listening on port: ${NFGS_PORT}`);
@@ -25,4 +17,9 @@ server.listen(NFGS_PORT, async () => {
     const recalcTimeDecayFactor = schedule.scheduleJob("*/5 * * * *", () => {
         updaterJobQueue.add({ function: "recalcTimeDecayFactor" });
     });
+
+    // const testJob = schedule.scheduleJob("* * * * * *", () => {
+    //     updaterJobQueue.add({ function: "test" });
+    //     popularityCalculatorJobQueue.add({ function: "test" });
+    // });
 });

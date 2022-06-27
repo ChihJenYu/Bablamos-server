@@ -115,7 +115,7 @@ const recalcTimeDecayFactor = async () => {
     for (let post of allPostIds) {
         const { id, user_id, created_at } = post;
         const timeDecayFactor = calculateTimeDecayFactor({ created_at });
-        let allFollowerIds = getUserIds({
+        let allFollowerIds = await getUserIds({
             type: "get_followers",
             user_id,
         });
@@ -186,7 +186,7 @@ const checkPopCount = async ({ post_id, type }) => {
         post_id,
         metric: type,
     });
-    const post_id = data.post_id;
+    post_id = data.post_id;
     let pop_count;
     let newPopSubScore;
     if (type == "like") {
@@ -313,4 +313,13 @@ const checkPopCount = async ({ post_id, type }) => {
     }
 };
 
-module.exports = { recalcAffinityTable, checkPopCount, recalcTimeDecayFactor };
+const test = () => {
+    console.log("Queue is successfully established");
+};
+
+module.exports = {
+    recalcAffinityTable,
+    checkPopCount,
+    recalcTimeDecayFactor,
+    test,
+};
