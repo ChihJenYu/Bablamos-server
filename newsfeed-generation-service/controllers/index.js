@@ -10,10 +10,7 @@ const getNewsfeed = async (req, res) => {
         { user_id: userId },
         {
             newsfeed: {
-                $slice: [
-                    from,
-                    NEWSFEED_PER_PAGE_FOR_WEB_SERVER,
-                ],
+                $slice: [from, NEWSFEED_PER_PAGE_FOR_WEB_SERVER],
             },
             affinity: {
                 $slice: 1, // inclusion projection to return nothing?

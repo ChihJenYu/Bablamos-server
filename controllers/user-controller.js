@@ -336,8 +336,9 @@ const userLikesEdge = async (req, res) => {
     }
     if (post_id) {
         popularityCalculatorJobQueue.add({
-            function: "checkLikeCount",
+            function: "checkPopCount",
             post_id: "" + post_id,
+            type: "like",
         });
     }
 };

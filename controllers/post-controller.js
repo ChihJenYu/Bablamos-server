@@ -38,8 +38,9 @@ const createPost = async (req, res) => {
 
     if (newPost.shared_post_id) {
         popularityCalculatorJobQueue.add({
-            function: "checkShareCount",
+            function: "checkPopCount",
             post_id: "" + newPost.shared_post_id,
+            type: "share",
         });
     }
 };
@@ -100,8 +101,9 @@ const deletePost = async (req, res) => {
     );
     if (deletedPost.shared_post_id) {
         popularityCalculatorJobQueue.add({
-            function: "checkShareCount",
+            function: "checkPopCount",
             post_id: "" + deletedPost.shared_post_id,
+            type: "share",
         });
     }
 };

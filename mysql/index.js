@@ -10,11 +10,15 @@ const pool = mysql.createPool({
 // cols is an array of columns to be returned
 const translateCols = (cols) => {
     if (!cols || cols.length == 0) {
-        return "*"
+        return "*";
     }
     let stringifiedCols = "";
     cols.forEach((element) => {
-        stringifiedCols += element + ", ";
+        if (element == "created_at" || element == "updated_at") {
+            stringifiedCols += `UNIX_TIMESTAMP(${element}) as ${element}, `;
+        } else {
+            stringifiedCols += element + ", ";
+        }
     });
     stringifiedCols = stringifiedCols.substring(0, stringifiedCols.length - 2);
     return stringifiedCols;

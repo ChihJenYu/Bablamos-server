@@ -37,6 +37,7 @@ const initialization = async () => {
             let feed = allFeeds[i];
             let feedToInsert = {};
             feedToInsert.post_id = feed.id;
+            feedToInsert.user_id = feed.user_id;
             feedToInsert.affinity =
                 userAffinityTable[userId][feed.user_id] || 0;
             feedToInsert.edge_weight = await calculateEdgeWeight(feed, userId);

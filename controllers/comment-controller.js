@@ -28,8 +28,9 @@ const createComment = async (req, res) => {
         created_at: newComment.created_at,
     });
     popularityCalculatorJobQueue.add({
-        function: "checkCommentCount",
+        function: "checkPopCount",
         post_id: "" + post_id,
+        type: "comment",
     });
 };
 
@@ -69,8 +70,9 @@ const deleteComment = async (req, res) => {
     await Comment.delete(comment_id);
     res.status(200).send({ id: comment_id });
     popularityCalculatorJobQueue.add({
-        function: "checkCommentCount",
+        function: "checkPopCount",
         post_id: "" + post_id,
+        type: "comment",
     });
 };
 

@@ -458,4 +458,5 @@ module.exports = {
     calculateEdgeWeight,
     calculateTimeDecayFactor,
     calcEdgeRankScore,
+    POP_WEIGHT
 };
