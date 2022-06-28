@@ -115,7 +115,6 @@ const recalcAffinityTable = async () => {
 };
 
 const recalcTimeDecayFactor = async () => {
-    hb;
     console.log("Begin job: recalculating time decay factor");
     // harder for sharding based on user id?
     const allPostIds = await Post.find(["id", "user_id", "created_at"]);
@@ -187,7 +186,7 @@ const recalcTimeDecayFactor = async () => {
             );
         }
         console.log(
-            `Updating time decay factor and edge rank score of post #${post} in all followers took ${
+            `Updating time decay factor and edge rank score of post #${id} in all followers took ${
                 Date.now() - postBeginTime
             }ms`
         );
