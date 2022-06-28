@@ -3,6 +3,7 @@ const {
     getUserIds,
     calcEdgeRankScore,
     calculateTimeDecayFactor,
+    calculateEdgeWeight,
 } = require("../models");
 const User = require("../models/user");
 const Post = require("../../models/post");
@@ -186,9 +187,6 @@ const recalcNewsfeed = async (req, res) => {
         );
 
         // if modifiedCount is not 1 then return
-
-        console.log("Pull result: ", pullResult);
-
         if (pullResult.modifiedCount == 0) {
             res.sendStatus(200);
             return;
@@ -206,13 +204,16 @@ const recalcNewsfeed = async (req, res) => {
             );
             let affinity = affinityObj ? affinityObj.affinity : 0;
 
-            // view count is not precise
-            const edgeRankScore = await calcEdgeRankScore({
+            const edgeWeight = await calculateEdgeWeight(feed, userId);
+
+            // view might not be precise
+            const edgeRankScore = calcEdgeRankScore(
                 affinity,
-                feed,
-                my_user_id: userId,
-                views: 1,
-            });
+                edgeWeight,
+                calculateTimeDecayFactor(feed),
+                1
+            );
+
             feedsToBePushed.push({
                 post_id: postId,
                 edge_rank_score: edgeRankScore,
