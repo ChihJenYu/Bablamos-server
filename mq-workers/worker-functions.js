@@ -8,6 +8,7 @@ const {
     calculateShareScore,
     calculateTimeDecayFactor,
 } = require("../newsfeed-generation-service/models");
+require("../newsfeed-generation-service/mongoose/");
 const User = require("../newsfeed-generation-service/models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
@@ -114,6 +115,7 @@ const recalcAffinityTable = async () => {
 };
 
 const recalcTimeDecayFactor = async () => {
+    hb;
     console.log("Begin job: recalculating time decay factor");
     // harder for sharding based on user id?
     const allPostIds = await Post.find(["id", "user_id", "created_at"]);
