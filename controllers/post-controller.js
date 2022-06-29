@@ -1,6 +1,9 @@
 const Post = require("../models/post");
 const newsfeed = require("../apis/newsfeed");
-const { popularityCalculatorJobQueue } = require("../mq/");
+const {
+    popularityCalculatorJobQueue,
+    notificationDispatcherJobQueue,
+} = require("../mq/");
 const createPost = async (req, res) => {
     // request body:
     // {
@@ -13,23 +16,19 @@ const createPost = async (req, res) => {
     //     photo_count: number
     // }
     const photo_count = req.files ? req.files.length : 0;
-    const { id: user_id, profile_pic_url, username } = req.user;
+    const { id: user_id } = req.user;
     const postData = req.body;
     const newPost = new Post({ ...postData, user_id, photo_count });
-
-    // save the new post to db
-    // const [newPostPacket] = await newPost.save();
 
     await newPost.save();
 
     res.status(201).send({ id: newPost.id });
 
+    // fan-out write
+    // call NFGS to update all newsfeeds of all followers of this user
     console.log(
         "New post saved in database; Calling newsfeed generation service..."
     );
-
-    // fan-out write
-    // call NFGS to update all newsfeeds of all followers of this user
     const UPDATE_METHOD = "write";
 
     newsfeed.post(
@@ -43,6 +42,15 @@ const createPost = async (req, res) => {
             type: "share",
         });
     }
+
+    // publish notification to followers
+    console.log("Calling notification service...");
+    notificationDispatcherJobQueue.add({
+        function: "pushNotification",
+        type: 1,
+        post_id: newPost.id,
+        user_id: newPost.user_id,
+    });
 };
 
 const editPost = async (req, res) => {
@@ -106,6 +114,14 @@ const deletePost = async (req, res) => {
             type: "share",
         });
     }
+
+    console.log("Calling notification service...");
+    notificationDispatcherJobQueue.add({
+        function: "invalidateNotification",
+        type: 1,
+        post_id: deletedPost.id,
+        user_id: deletedPost.user_id,
+    });
 };
 
 module.exports = { createPost, editPost, deletePost };

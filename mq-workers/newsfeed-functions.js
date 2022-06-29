@@ -8,7 +8,7 @@ const {
     calculateShareScore,
     calculateTimeDecayFactor,
 } = require("../newsfeed-generation-service/models");
-require("../newsfeed-generation-service/mongoose/");
+require("../newsfeed-generation-service/mongoose");
 const User = require("../newsfeed-generation-service/models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
@@ -350,13 +350,8 @@ const checkPopCount = async ({ post_id, type }) => {
     );
 };
 
-const test = () => {
-    console.log("Queue is successfully established");
-};
-
 module.exports = {
     recalcAffinityTable,
     checkPopCount,
     recalcTimeDecayFactor,
-    test,
 };

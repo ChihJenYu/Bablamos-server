@@ -1,8 +1,8 @@
 const { updaterJobQueue } = require("../mq");
-const workerFunctions = require("./worker-functions");
+const newsfeedFunctions = require("./newsfeed-functions");
 
 updaterJobQueue.process(async (job, done) => {
-    await workerFunctions[job.data.function]();
+    await newsfeedFunctions[job.data.function]();
     done();
 });
 

@@ -76,6 +76,7 @@ const updateNewsfeed = async (req, res) => {
             );
         }
         // recalculate edge rank score and sort
+        // MUST FIX
         else if (httpMethod === "PATCH") {
             const timestampStart = Date.now();
             for (let followerId of followerIds) {

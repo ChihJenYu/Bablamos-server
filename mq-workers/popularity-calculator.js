@@ -1,8 +1,8 @@
 const { popularityCalculatorJobQueue } = require("../mq");
-const workerFunctions = require("./worker-functions");
+const newsfeedFunctions = require("./newsfeed-functions");
 
 popularityCalculatorJobQueue.process(async (job, done) => {
-    await workerFunctions[job.data.function]({
+    await newsfeedFunctions[job.data.function]({
         post_id: job.data.post_id,
         type: job.data.type,
     });

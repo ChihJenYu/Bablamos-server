@@ -20,5 +20,10 @@ module.exports = {
             script: "./mq-workers/schedule-updater.js",
             watch: true,
         },
+        {
+            name: "socket-server",
+            script: "./socket-server/server.js",
+            watch: true,
+        },
     ],
 };

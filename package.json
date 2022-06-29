@@ -7,7 +7,8 @@
         "test": "echo \"Error: no test specified\" && exit 1",
         "start-server": "nodemon server.js",
         "start-newsfeed": "node ./newsfeed-generation-service/server.js",
-        "init-newsfeed": "node ./newsfeed-generation-service/server.js init"
+        "init-newsfeed": "node ./newsfeed-generation-service/server.js init",
+        "start-socket": "nodemon ./socket-server/server.js"
     },
     "author": "",
     "license": "ISC",
@@ -21,6 +22,7 @@
         "crypto": "^1.0.1",
         "dotenv": "^16.0.1",
         "express": "^4.18.1",
+        "http": "^0.0.1-security",
         "jsonwebtoken": "^8.5.1",
         "lodash": "^4.17.21",
         "mongoose": "^6.4.0",
@@ -29,6 +31,8 @@
         "mysql2": "^2.3.3",
         "node-schedule": "^2.1.0",
         "redis": "^4.1.0",
+        "socket.io": "^4.5.1",
+        "socket.io-client": "^4.5.1",
         "validator": "^13.7.0"
     }
 }

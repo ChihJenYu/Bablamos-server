@@ -23,7 +23,20 @@ const updaterJobQueue = new Queue("updater-job-queue", {
     },
 });
 
+const notificationDispatcherJobQueue = new Queue(
+    "notification-dispatcher-job-queue",
+    {
+        redis: {
+            host: REDIS_HOST,
+            port: REDIS_PORT,
+            username: REDIS_USER,
+            password: REDIS_PASSWORD,
+        },
+    }
+);
+
 module.exports = {
     popularityCalculatorJobQueue,
     updaterJobQueue,
+    notificationDispatcherJobQueue,
 };
