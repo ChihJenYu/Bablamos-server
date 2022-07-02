@@ -4,6 +4,7 @@ const { io } = require("socket.io-client");
 const Notification = require("../models/notification");
 const socket = io("http://localhost:3003");
 const User = require("../models/user");
+const Post = require("../models/post");
 
 const getFollowerOnlineStatus = async (user_id) => {
     const [result] = await db.pool.query(
@@ -19,6 +20,7 @@ const getFollowerOnlineStatus = async (user_id) => {
     return result;
 };
 
+// incoming party's user data
 const getUserDataFromUserId = async (user_id) => {
     const [result] = await db.pool.query(
         `SELECT username, user_profile_pic FROM user WHERE id = ?
@@ -29,7 +31,7 @@ const getUserDataFromUserId = async (user_id) => {
         username: result[0].username,
         profile_pic_url: User.generatePictureUrl({
             has_profile: result[0].user_profile_pic == 1,
-            uid: user_id,
+            id: user_id,
         }),
     };
 };
@@ -67,7 +69,8 @@ const pushNotification = async (args) => {
             });
 
             allOnlineFollowers.forEach((el) => {
-                socket.emit("type_1_notification_event", {
+                socket.emit("notification_event", {
+                    notification_type_id: args.type,
                     username,
                     inv_user_id: user_id,
                     profile_pic_url,
@@ -86,7 +89,123 @@ const pushNotification = async (args) => {
             inv_post_id: post_id,
             inv_user_id: user_id,
         });
+        return;
+    }
+    if (args.type == 2) {
+        let { post_id, user_id, comment_id } = args;
+        // user the notification should be pushed to
+        const [subscribeePacket] = await Post.find(["user_id"], {
+            id: post_id,
+        });
+        const subscribeeId = subscribeePacket.user_id;
+        if (user_id === subscribeeId) {
+            return;
+        }
+        const { username, profile_pic_url } = await getUserDataFromUserId(
+            user_id
+        );
+        // save notification in db
+        const newNotification = new Notification({
+            type_id: 2,
+            for_user_id: subscribeeId,
+            inv_post_id: post_id,
+            inv_comment_id: comment_id,
+            inv_user_id: user_id,
+        });
+
+        const notificationId = await newNotification.save();
+
+        // push socket notification
+        socket.emit("notification_event", {
+            notification_type_id: args.type,
+            username,
+            inv_user_id: user_id,
+            profile_pic_url,
+            inv_comment_id: comment_id,
+            inv_post_id: post_id,
+            for_user_id: subscribeeId,
+            id: notificationId,
+            created_at: Date.now() / 1000,
+        });
+        return;
+    }
+    if (args.type == 3) {
+        let { post_id, comment_id, user_id, for_user_id } = args;
+        const { username, profile_pic_url } = await getUserDataFromUserId(
+            user_id
+        );
+        const newNotification = new Notification({
+            type_id: 3,
+            for_user_id,
+            inv_post_id: post_id,
+            inv_comment_id: comment_id,
+            inv_user_id: user_id,
+        });
+        const notificationId = await newNotification.save();
+        socket.emit("notification_event", {
+            notification_type_id: args.type,
+            username,
+            inv_user_id: user_id,
+            profile_pic_url,
+            for_user_id,
+            id: notificationId,
+            inv_post_id: post_id,
+            inv_comment_id: comment_id,
+            created_at: Date.now() / 1000,
+        });
+        return;
+    }
+    if (args.type == 4 || args.type == 5 || args.type == 6) {
+        let { user_id, for_user_id } = args;
+        const { username, profile_pic_url } = await getUserDataFromUserId(
+            user_id
+        );
+        const newNotificationFromOutgoing = new Notification({
+            type_id: args.type,
+            for_user_id,
+            inv_user_id: user_id,
+        });
+
+        const notificationIdFromOutgoing =
+            await newNotificationFromOutgoing.save();
+
+        // push socket notification
+        socket.emit("notification_event", {
+            notification_type_id: args.type,
+            username,
+            inv_user_id: user_id,
+            profile_pic_url,
+            for_user_id,
+            id: notificationIdFromOutgoing,
+            created_at: Date.now() / 1000,
+        });
+
+        // acceptor also receives notification
+        if (args.type == 6) {
+            const newNotificationForOutgoing = new Notification({
+                type_id: args.type,
+                for_user_id: user_id,
+                inv_user_id: for_user_id,
+            });
+            const notificationIdForOutgoing =
+                await newNotificationForOutgoing.save();
+            socket.emit("notification_event", {
+                notification_type_id: args.type,
+                username,
+                inv_user_id: for_user_id,
+                profile_pic_url,
+                for_user_id: user_id,
+                id: notificationIdForOutgoing,
+                created_at: Date.now() / 1000,
+            });
+        }
+
+        return;
     }
 };
 
-module.exports = { pushNotification };
+const invalidateNotification = async () => {
+    console.log("Invalidate");
+};
+
+module.exports = { pushNotification, invalidateNotification };

@@ -7,6 +7,7 @@ const JWT_EXPIRE = "365d";
 const CLOUDFRONT_DOMAIN_NAME = "https://d3h0a68hsbn5ed.cloudfront.net";
 const DEFAULT_FRIENDS_PAGE_SIZE = 20;
 const PROFILE_FRIENDS_PAGE_SIZE = 9;
+const FRIENDS_SUGGESTIONS = 5;
 // const FRIENDS
 class User {
     // password is raw; hashing occurs in save method
@@ -33,11 +34,17 @@ class User {
     }
 
     // return the user packets
-    static async find(cols, filter) {
+    static async find(cols, filter, page_size) {
         const colsClause = db.translateCols(cols);
         let query;
-        const { whereClause, args } = db.translateFilter(filter);
-        query = `select ${colsClause} from user ${whereClause}`;
+        let { whereClause, args } = db.translateFilter(filter);
+        query = `select ${colsClause} from user ${whereClause} ${
+            page_size ? "LIMIT ?, ?" : ""
+        }`;
+        if (page_size) {
+            args.push(0);
+            args.push(page_size);
+        }
         const [result] = await db.pool.query(query, args);
         return result;
     }
@@ -235,25 +242,32 @@ class User {
     }
 
     // filters: user_id, friend_name (= or like), status
-    static async findFriends(at_profile, filter, paging) {
+    static async findFriends(at_profile, filter, paging, mentionSuggestion) {
         let { user_id } = filter;
         if (!user_id) {
             throw new Error("Missing user_id");
         }
-        const { whereClause, args } = db.translateFilter(filter);
+        let { whereClause, args } = db.translateFilter(filter);
+        if (at_profile) {
+            args = [
+                ...args,
+                PROFILE_FRIENDS_PAGE_SIZE * paging,
+                PROFILE_FRIENDS_PAGE_SIZE,
+            ];
+        } else if (mentionSuggestion) {
+            args = [...args, 0, FRIENDS_SUGGESTIONS];
+        } else {
+            args = [
+                ...args,
+                DEFAULT_FRIENDS_PAGE_SIZE * paging,
+                DEFAULT_FRIENDS_PAGE_SIZE,
+            ];
+        }
         let [result] = await db.pool.query(
             `SELECT f.friend_userid as id, u.username as friend_name, u.user_profile_pic, u.allow_stranger_follow FROM friendship f
             JOIN user u on f.friend_userid = u.id
             ${whereClause} ORDER BY id DESC LIMIT ?, ?`,
-            [
-                ...args,
-                at_profile
-                    ? PROFILE_FRIENDS_PAGE_SIZE * paging
-                    : DEFAULT_FRIENDS_PAGE_SIZE * paging,
-                at_profile
-                    ? PROFILE_FRIENDS_PAGE_SIZE
-                    : DEFAULT_FRIENDS_PAGE_SIZE,
-            ]
+            args
         );
         result = result.map((friend) => {
             return {
@@ -270,7 +284,9 @@ class User {
     // user info, allow_stranger_follow, friend_status, follow_status and friend count
     static async getUserInfo({ user_asking, user_in_question }) {
         const [result] = await db.pool.query(
-            `select u.info as user_info, u.user_profile_pic, u.username, count(f.friend_userid) as friend_count,
+            `select u.info as user_info, u.user_profile_pic, u.username, 
+            sum(case when 
+            f.status = "accepted" then 1 else 0 end) as friend_count,
             fsv.status as friend_status, 
             case when
                 fls.following_userid is null
@@ -300,7 +316,6 @@ class User {
                 user_in_question,
             ]
         );
-        console.log(result);
         return result[0];
     }
 

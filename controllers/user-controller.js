@@ -1,11 +1,16 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
-const { popularityCalculatorJobQueue } = require("../mq/");
+const {
+    popularityCalculatorJobQueue,
+    notificationDispatcherJobQueue,
+} = require("../mq/");
 const redisClient = require("../redis");
 const newsfeed = require("../apis/newsfeed");
 const aws = require("aws-sdk");
 const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
+const FRIENDS_RESULTS_PER_PAGE = 8;
+
 
 let userTempNewsfeedStorage = {};
 
@@ -343,21 +348,52 @@ const userLikesEdge = async (req, res) => {
     }
 };
 
-// /user/friend
+// /user/friend?kw=&paging=
 const getUserFriends = async (req, res) => {
-    let { id: userInQuestion, status, paging } = req.query;
+    let { id: userInQuestion, status, paging, kw, type } = req.query;
+    paging = +paging || 0;
     userInQuestion = +userInQuestion;
     const userAsking = req.user.id;
     if (userAsking !== userInQuestion && status !== "accepted") {
         res.status(403).send({ error: "Not authorized" });
         return;
     }
+    // if no id query parameter, use req.user.id
+    let filter = { user_id: userInQuestion || userAsking, status };
+    if (kw) {
+        filter.username = { like: `${kw}%` };
+    }
     const friends = await User.findFriends(
         null,
-        { user_id: userInQuestion, status },
-        paging
+        filter,
+        paging,
+        type === "mention" ? true : null
     );
     res.send({ data: friends });
+};
+
+// user?kw=
+const searchUsers = async (req, res) => {
+    const { kw } = req.query;
+    let users = await User.find(
+        ["id", "username", "user_profile_pic"],
+        {
+            username: {
+                like: `%${kw}%`,
+            },
+        },
+        FRIENDS_RESULTS_PER_PAGE
+    );
+    users = users.map((user) => {
+        return {
+            ...user,
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: user.user_profile_pic == 1,
+                id: user.id,
+            }),
+        };
+    });
+    res.send({ data: users });
 };
 
 const userBefriends = async (req, res) => {
@@ -366,6 +402,23 @@ const userBefriends = async (req, res) => {
     const outgoing_action = req.query.action;
     await User.befriend({ outgoing_user_id, friend_userid, outgoing_action });
     res.sendStatus(201);
+    if (outgoing_action === "send") {
+        notificationDispatcherJobQueue.add({
+            function: "pushNotification",
+            type: 5,
+            user_id: outgoing_user_id,
+            for_user_id: friend_userid,
+        });
+        return;
+    }
+    if (outgoing_action === "accept") {
+        notificationDispatcherJobQueue.add({
+            function: "pushNotification",
+            type: 6,
+            user_id: outgoing_user_id,
+            for_user_id: friend_userid,
+        });
+    }
 };
 
 const userUnfriends = async (req, res) => {
@@ -382,6 +435,12 @@ const userFollows = async (req, res) => {
     const following_userid = +req.query.id;
     await User.follow({ outgoing_user_id, following_userid });
     res.sendStatus(201);
+    notificationDispatcherJobQueue.add({
+        function: "pushNotification",
+        type: 4,
+        user_id: outgoing_user_id,
+        for_user_id: following_userid,
+    });
 };
 
 // DELETE
@@ -390,6 +449,12 @@ const userUnfollows = async (req, res) => {
     const following_userid = +req.query.id;
     await User.unfollow({ outgoing_user_id, following_userid });
     res.sendStatus(200);
+    // notificationDispatcherJobQueue.add({
+    //     function: "invalidateNotification",
+    //     type: 4,
+    //     user_id: outgoing_user_id,
+    //     for_user_id: following_userid,
+    // });
 };
 
 // /user/following
@@ -444,6 +509,7 @@ module.exports = {
     userBefriends,
     userUnfriends,
     getUserFriends,
+    searchUsers,
     userFollows,
     userUnfollows,
     getUserFollowings,

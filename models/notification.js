@@ -48,7 +48,7 @@ class Notification {
                 ]
             );
             await conn.query("COMMIT");
-            return true;
+            return notification_id;
         } catch (error) {
             await conn.query("ROLLBACK");
             console.log(error);
@@ -107,7 +107,7 @@ class Notification {
     // returns array
     static async find({ user_id, paging }) {
         let [result] = await db.pool.query(
-            `select n.id, n.for_user_id, unix_timestamp(n.created_at) as created_at, n.read_by_user,n.notification_type_id,
+            `select n.id, n.for_user_id, unix_timestamp(n.created_at) as created_at, n.read_by_user, n.notification_type_id,
             nd.inv_post_id, nd.inv_comment_id, nd.inv_user_id, u.username, u.user_profile_pic
             from notification n
             left join notification_detail nd

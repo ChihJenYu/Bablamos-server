@@ -150,7 +150,11 @@ class Feed extends Post {
                 tags: feed.tags || [],
                 mentioned_users: feed.mentioned_users || [],
             });
-            const latestComments = await Feed.getLatestComments(feed.id, 10);
+            const latestComments = await Feed.getLatestComments(
+                feed.id,
+                10,
+                user_asking
+            );
             newFeed.latest_comments = latestComments || [];
             newsfeedToReturn.push(newFeed);
         }
@@ -255,7 +259,7 @@ class Feed extends Post {
         return newsfeedToReturn;
     }
 
-    // {metric: "like" || "comment" || "share"}
+    // { metric: "like" || "comment" || "share" }
     static async getPopularity({ post_id, metric }) {
         let queryMetric = {};
         if (metric === "like") {
@@ -314,56 +318,6 @@ class Feed extends Post {
             `,
             [post_id]
         );
-        // let [popularity] = await db.pool.query(
-        //     `select lc.id, lc.like_count,
-        //     cc.comment_count, sc.share_count
-        //     from
-        //     (
-        //     select
-        //         post.id,
-        //         count(lu.user_id) as like_count
-        //     from post
-        //     left join like_user lu on post.id = lu.post_id
-        //     where post.id = ?
-        //     group by post.id
-        //     order by post.created_at desc
-        //     ) as lc
-        //     join
-        //     (
-        //     select
-        //         post.id, count(c.id) as comment_count
-        //     from post
-        //     left join comment c on post.id = c.post_id
-        //     where post.id = ?
-        //     group by post.id
-        //     order by post.created_at desc
-        //     ) as cc on lc.id = cc.id
-        //     join
-        //     (
-        //     select
-        //         post.id, sc.share_count
-        //     from post
-        //     left join
-        //     (
-        //         select distinct p.id,
-        //         case when
-        //         share_view.count is null
-        //         then 0
-        //         else share_view.count
-        //         end as share_count
-        //         from post p
-        //         left join (select distinct shared_post_id,
-        //         count(*) as count from post group by shared_post_id) share_view
-        //         on p.id = share_view.shared_post_id
-        //     ) sc on post.id = sc.id
-        //     where post.id = ?
-        //     group by post.id, sc.share_count
-        //     order by post.created_at desc
-        //     ) as sc on cc.id = sc.id
-        //     order by created_at DESC
-        //     `,
-        //     [post_id, post_id, post_id]
-        // );
         return popularity[0];
     }
 
@@ -470,7 +424,11 @@ class Feed extends Post {
                 ? [post_id, post_id, post_id, post_id, post_id, user_asking]
                 : [post_id, post_id, post_id, post_id, post_id]
         );
-        const latestComments = await Feed.getLatestComments(post_id, 10);
+        const latestComments = await Feed.getLatestComments(
+            post_id,
+            10,
+            user_asking
+        );
         const feed = new Feed({
             ...feedDetail[0],
             latest_comments: latestComments || [],
@@ -480,12 +438,34 @@ class Feed extends Post {
         return feed;
     }
 
-    static async getLatestComments(post_id, comment_count) {
+    static async getLatestComments(post_id, comment_count, user_asking) {
         let [latestComments] = await db.pool.query(
-            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, c.level, c.replied_comment_id, u.username, u.user_profile_pic 
-        from comment c join user u on c.user_id = u.id
-        where post_id = ? and level = 1 order by created_at asc limit ?`,
-            [post_id, comment_count]
+            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
+            sum(
+                case when lu.user_id is null then 0 else 1 end
+            ) as like_count ${
+                user_asking
+                    ? `, case when
+                al.comment_id is null
+                then 0
+                else 1
+                end as already_liked`
+                    : ""
+            }
+            from comment c join user u on c.user_id = u.id
+            left join like_user lu on c.id = lu.comment_id
+            ${
+                user_asking
+                    ? `left join (
+                        select comment_id from like_user where user_id = ?
+                    ) as al on c.id = al.comment_id`
+                    : ""
+            }
+            
+            where c.post_id = ? group by c.id order by c.created_at desc limit ?`,
+            user_asking
+                ? [user_asking, post_id, comment_count]
+                : [post_id, comment_count]
         );
         return latestComments;
     }

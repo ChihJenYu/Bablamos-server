@@ -10,6 +10,7 @@ const {
     userBefriends,
     userUnfriends,
     getUserFriends,
+    searchUsers,
     userFollows,
     userUnfollows,
     getUserFollowers,
@@ -43,6 +44,8 @@ router
     .get([authentication, asyncErrorHandler(getUserFriends)]) // id, status, paging
     .post([authentication, asyncErrorHandler(userBefriends)]) // action, user-id
     .delete([authentication, asyncErrorHandler(userUnfriends)]); // user-id
+
+router.route("/user").get([authentication, asyncErrorHandler(searchUsers)]);
 
 // id (id of user to be followed)
 router

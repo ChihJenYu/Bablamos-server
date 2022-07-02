@@ -38,8 +38,23 @@ class Comment extends Edge {
     }
 
     static async delete(id) {
-        await db.pool.query(`DELETE FROM comment WHERE id = ?`, [id]);
-        return true;
+        const conn = await db.pool.getConnection();
+        try {
+            await conn.query("START TRANSACTION");
+            let [responseObject] = await conn.query(
+                "SELECT * FROM comment WHERE id = ?",
+                [id]
+            );
+            await db.pool.query(`DELETE FROM comment WHERE id = ?`, [id]);
+            await conn.query("COMMIT");
+            return responseObject[0];
+        } catch (error) {
+            await conn.query("ROLLBACK");
+            console.log(error);
+            return false;
+        } finally {
+            await conn.release();
+        }
     }
 
     async save() {

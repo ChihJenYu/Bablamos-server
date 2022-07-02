@@ -1,5 +1,8 @@
 const Comment = require("../models/comment");
-const { popularityCalculatorJobQueue } = require("../mq/");
+const {
+    popularityCalculatorJobQueue,
+    notificationDispatcherJobQueue,
+} = require("../mq/");
 const createComment = async (req, res) => {
     const post_id = req.query["post-id"];
     const user_id = req.user.id;
@@ -31,6 +34,23 @@ const createComment = async (req, res) => {
         function: "checkPopCount",
         post_id: "" + post_id,
         type: "comment",
+    });
+    notificationDispatcherJobQueue.add({
+        function: "pushNotification",
+        type: 2,
+        post_id,
+        user_id,
+        comment_id: newComment.id,
+    });
+    commentData.mentioned_users.forEach((userId) => {
+        notificationDispatcherJobQueue.add({
+            function: "pushNotification",
+            type: 3,
+            post_id,
+            user_id,
+            comment_id: newComment.id,
+            for_user_id: userId,
+        });
     });
 };
 
@@ -67,12 +87,19 @@ const editComment = async (req, res) => {
 
 const deleteComment = async (req, res) => {
     const comment_id = req.comment_id;
-    await Comment.delete(comment_id);
+    const { post_id } = await Comment.delete(comment_id);
     res.status(200).send({ id: comment_id });
     popularityCalculatorJobQueue.add({
         function: "checkPopCount",
         post_id: "" + post_id,
         type: "comment",
+    });
+    notificationDispatcherJobQueue.add({
+        function: "invalidateNotification",
+        type: 2,
+        post_id,
+        user_id: req.user.id,
+        comment_id,
     });
 };
 

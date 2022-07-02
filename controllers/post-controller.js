@@ -1,4 +1,6 @@
 const Post = require("../models/post");
+const Feed = require("../models/feed");
+const User = require("../models/user");
 const newsfeed = require("../apis/newsfeed");
 const {
     popularityCalculatorJobQueue,
@@ -124,4 +126,24 @@ const deletePost = async (req, res) => {
     });
 };
 
-module.exports = { createPost, editPost, deletePost };
+const getFeedDetail = async (req, res) => {
+    const userId = req.user.id;
+    const postId = +req.query["post-id"];
+    let feedDetail = await Feed.getFeedDetail(postId, userId);
+    feedDetail.profile_pic_url = User.generatePictureUrl({
+        has_profile: feedDetail.user_profile_pic == 1,
+        id: feedDetail.user_id,
+    });
+    feedDetail.latest_comments = feedDetail.latest_comments.map((c) => {
+        return {
+            ...c,
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: c.user_profile_pic == 1,
+                id: c.user_id,
+            }),
+        };
+    });
+    res.send({ data: feedDetail });
+};
+
+module.exports = { createPost, editPost, deletePost, getFeedDetail };

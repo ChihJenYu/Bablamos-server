@@ -90,8 +90,8 @@ class Post extends Edge {
                         this.content,
                         this.audience_type_id,
                         this.shared_post_id,
-                        this.id,
                         this.photo_count,
+                        this.id,
                     ]
                 );
 
@@ -107,7 +107,7 @@ class Post extends Edge {
                 }
                 // update post_audience_list
                 await conn.query(
-                    "DELETE FROM post_post_audience_list WHERE post_id = ?",
+                    "DELETE FROM post_audience_list WHERE post_id = ?",
                     [this.id]
                 );
                 if (postAudienceArray.length > 0) {

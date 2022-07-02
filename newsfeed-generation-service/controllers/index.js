@@ -1,13 +1,11 @@
 const Feed = require("../../models/feed");
 const {
     getUserIds,
-    calcEdgeRankScore,
     calculateTimeDecayFactor,
     calculateEdgeWeight,
+    calcEdgeRankScore,
 } = require("../models");
 const User = require("../models/user");
-const Post = require("../../models/post");
-
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 
 const getNewsfeed = async (req, res) => {
@@ -76,7 +74,6 @@ const updateNewsfeed = async (req, res) => {
             );
         }
         // recalculate edge rank score and sort
-        // MUST FIX
         else if (httpMethod === "PATCH") {
             const timestampStart = Date.now();
             for (let followerId of followerIds) {
@@ -84,6 +81,7 @@ const updateNewsfeed = async (req, res) => {
                 const userObj = await User.findOne({
                     user_id: followerId,
                 });
+
                 const feed = await Feed.getFeedDetail(postId);
                 let newsfeedObj = userObj.newsfeed.find(
                     (nf) => nf.post_id == postId
@@ -95,16 +93,17 @@ const updateNewsfeed = async (req, res) => {
                 let affinity = affinityObj ? affinityObj.affinity : 0;
 
                 // calculate edge rank score
-                const edgeRankScore = await calcEdgeRankScore({
+                const edgeWeight = await calculateEdgeWeight(feed, followerId);
+                const edgeRankScore = calcEdgeRankScore(
                     affinity,
-                    feed,
-                    my_user_id: userId,
-                    views,
-                });
+                    edgeWeight,
+                    calculateTimeDecayFactor(feed),
+                    views
+                );
 
                 // update edge rank score
                 await User.updateOne(
-                    { user_id: userId, "newsfeed.post_id": postId },
+                    { user_id: followerId, "newsfeed.post_id": postId },
                     {
                         $set: {
                             "newsfeed.$.edge_rank_score": edgeRankScore,
@@ -114,12 +113,14 @@ const updateNewsfeed = async (req, res) => {
 
                 // sort user newsfeed
                 await User.updateOne(
-                    { user_id: userId },
+                    { user_id: followerId },
                     {
                         $push: {
-                            $each: [],
-                            $sort: {
-                                edge_rank_score: -1,
+                            newsfeed: {
+                                $each: [],
+                                $sort: {
+                                    edge_rank_score: -1,
+                                },
                             },
                         },
                     }
