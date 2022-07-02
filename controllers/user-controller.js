@@ -1,5 +1,6 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
+const Post = require("../models/post");
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
@@ -10,7 +11,6 @@ const aws = require("aws-sdk");
 const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 const FRIENDS_RESULTS_PER_PAGE = 8;
-
 
 let userTempNewsfeedStorage = {};
 
@@ -209,6 +209,11 @@ const getNewsfeed = async (req, res) => {
                     return newObj;
                 }
             );
+            if (feedContent.shared_post_id) {
+                feedContent.shared_post_data = await Post.getSharedData(
+                    feedContent.shared_post_id
+                );
+            }
             feedContent.is_new = newsfeedToReturn[i].is_new;
             newsfeedToReturn[i] = feedContent;
         }
@@ -225,24 +230,29 @@ const getNewsfeed = async (req, res) => {
             userAsking,
             paging
         );
-        newsfeedToReturn = newsfeedToReturn.map((feed) => {
-            return {
-                ...feed,
-                profile_pic_url: User.generatePictureUrl({
-                    has_profile: feed.user_profile_pic == 1,
-                    id: feed.user_id,
-                }),
-                latest_comments: feed.latest_comments.map((comment) => {
-                    return {
-                        ...comment,
-                        profile_pic_url: User.generatePictureUrl({
-                            has_profile: comment.user_profile_pic == 1,
-                            id: comment.user_id,
-                        }),
-                    };
-                }),
-            };
-        });
+
+        for (let i = 0; i < newsfeedToReturn.length; i++) {
+            const feed = newsfeedToReturn[i];
+            feed.profile_pic_url = User.generatePictureUrl({
+                has_profile: feed.user_profile_pic == 1,
+                id: feed.user_id,
+            });
+            feed.latest_comments = feed.latest_comments.map((comment) => {
+                return {
+                    ...comment,
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: comment.user_profile_pic == 1,
+                        id: comment.user_id,
+                    }),
+                };
+            });
+            if (feed.shared_post_id) {
+                feed.shared_post_data = await Post.getSharedData(
+                    feed.shared_post_id
+                );
+            }
+            newsfeedToReturn[i] = feed;
+        }
         res.send({ data: newsfeedToReturn });
     }
 };

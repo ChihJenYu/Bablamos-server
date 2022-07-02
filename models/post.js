@@ -1,5 +1,6 @@
 const db = require("../mysql");
 const Edge = require("./edge");
+const User = require("./user");
 
 class Post extends Edge {
     constructor({
@@ -205,6 +206,37 @@ class Post extends Edge {
         query = `select ${colsClause} from post ${whereClause}`;
         const [result] = await db.pool.query(query, args);
         return result;
+    }
+
+    static async getSharedData(post_id) {
+        const [
+            {
+                user_id: shared_post_user_id,
+                content: shared_post_content,
+                created_at: shared_post_created_at,
+            },
+        ] = await Post.find(["user_id", "content", "created_at"], {
+            id: post_id,
+        });
+        const [
+            {
+                username: shared_post_username,
+                user_profile_pic: shared_post_user_profile_pic,
+            },
+        ] = await User.find(["username", "user_profile_pic"], {
+            id: shared_post_user_id,
+        });
+        return {
+            id: post_id,
+            user_id: shared_post_user_id,
+            content: shared_post_content,
+            created_at: shared_post_created_at,
+            username: shared_post_username,
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: shared_post_user_profile_pic == 1,
+                id: shared_post_user_id,
+            }),
+        };
     }
 }
 

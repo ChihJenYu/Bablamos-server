@@ -134,6 +134,11 @@ const getFeedDetail = async (req, res) => {
         has_profile: feedDetail.user_profile_pic == 1,
         id: feedDetail.user_id,
     });
+    if (feedDetail.shared_post_id) {
+        feedDetail.shared_post_data = await Post.getSharedData(
+            feedDetail.shared_post_id
+        );
+    }
     feedDetail.latest_comments = feedDetail.latest_comments.map((c) => {
         return {
             ...c,
