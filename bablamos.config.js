@@ -20,5 +20,9 @@ module.exports = {
             name: "socket-server",
             script: "./socket-server/server.js",
         },
+        {
+            name: "notification-service",
+            script: "./mq-workers/notification-service.js",
+        },
     ],
 };
