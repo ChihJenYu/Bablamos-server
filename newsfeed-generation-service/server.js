@@ -17,10 +17,10 @@ server.listen(NFGS_PORT, async () => {
     });
 
     // send 'recalcTimeDecayFactor' job to updaterJobQueue every 5 minutes
-    const recalcTimeDecayFactor = schedule.scheduleJob("*/5 * * * *", () => {
-        updaterJobQueue.add(
-            { function: "recalcTimeDecayFactor" },
-            { priority: 2 }
-        );
-    });
+    // const recalcTimeDecayFactor = schedule.scheduleJob("*/5 * * * *", () => {
+    //     updaterJobQueue.add(
+    //         { function: "recalcTimeDecayFactor" },
+    //         { priority: 2 }
+    //     );
+    // });
 });
