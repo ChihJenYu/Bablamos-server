@@ -36,10 +36,23 @@ io.on("connection", (socket) => {
             profile_pic_url,
             created_at,
         }) => {
-            console.log("Got");
+            console.log({
+                notification_type_id,
+                username,
+                inv_user_id,
+                inv_post_id,
+                inv_comment_id,
+                for_user_id,
+                id,
+                profile_pic_url,
+                created_at,
+            });
             const result = await OnlineUser.find(["socket_id"], {
                 user_id: for_user_id,
             });
+            if (result.length === 0) {
+                return;
+            }
             const { socket_id } = result[0];
             io.to(socket_id).emit("display_notification", {
                 notification_type_id,

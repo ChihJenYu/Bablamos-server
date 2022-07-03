@@ -43,6 +43,17 @@ const createPost = async (req, res) => {
             post_id: "" + newPost.shared_post_id,
             type: "share",
         });
+
+        // publish notification to shared_post_user
+        console.log("Calling notification service...");
+        notificationDispatcherJobQueue.add({
+            function: "pushNotification",
+            type: 7,
+            post_id: newPost.id,
+            shared_post_id: newPost.shared_post_id,
+            user_id: newPost.user_id,
+        });
+        return;
     }
 
     // publish notification to followers

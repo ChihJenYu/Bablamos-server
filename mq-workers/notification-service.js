@@ -7,6 +7,7 @@ notificationDispatcherJobQueue.process(async (job, done) => {
     await workerFunctions[job.data.function]({
         type: job.data.type,
         post_id: job.data.post_id,
+        shared_post_id: job.data.shared_post_id,
         comment_id: job.data.comment_id,
         user_id: job.data.user_id,
         for_user_id: job.data.for_user_id,

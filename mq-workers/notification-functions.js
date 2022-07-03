@@ -92,13 +92,8 @@ const pushNotification = async (args) => {
         return;
     }
     if (args.type == 2) {
-        let { post_id, user_id, comment_id } = args;
-        // user the notification should be pushed to
-        const [subscribeePacket] = await Post.find(["user_id"], {
-            id: post_id,
-        });
-        const subscribeeId = subscribeePacket.user_id;
-        if (user_id === subscribeeId) {
+        let { post_id, user_id, comment_id, for_user_id } = args;
+        if (user_id === for_user_id) {
             return;
         }
         const { username, profile_pic_url } = await getUserDataFromUserId(
@@ -107,7 +102,7 @@ const pushNotification = async (args) => {
         // save notification in db
         const newNotification = new Notification({
             type_id: 2,
-            for_user_id: subscribeeId,
+            for_user_id,
             inv_post_id: post_id,
             inv_comment_id: comment_id,
             inv_user_id: user_id,
@@ -123,13 +118,14 @@ const pushNotification = async (args) => {
             profile_pic_url,
             inv_comment_id: comment_id,
             inv_post_id: post_id,
-            for_user_id: subscribeeId,
+            for_user_id,
             id: notificationId,
             created_at: Date.now() / 1000,
         });
         return;
     }
     if (args.type == 3) {
+        // if for_user_id is author of post_id, don't push
         let { post_id, comment_id, user_id, for_user_id } = args;
         const { username, profile_pic_url } = await getUserDataFromUserId(
             user_id
@@ -200,6 +196,34 @@ const pushNotification = async (args) => {
             });
         }
 
+        return;
+    }
+    if (args.type == 7) {
+        let { post_id, user_id, shared_post_id } = args;
+        const [sharedUserPacket] = await Post.find(["user_id"], {
+            id: shared_post_id,
+        });
+        const sharedUserId = sharedUserPacket.user_id;
+        const { username, profile_pic_url } = await getUserDataFromUserId(
+            user_id
+        );
+        const newNotification = new Notification({
+            type_id: 7,
+            for_user_id: sharedUserId,
+            inv_post_id: post_id,
+            inv_user_id: user_id,
+        });
+        const notificationId = await newNotification.save();
+        socket.emit("notification_event", {
+            notification_type_id: args.type,
+            username,
+            inv_user_id: user_id,
+            profile_pic_url,
+            for_user_id: sharedUserId,
+            id: notificationId,
+            inv_post_id: post_id,
+            created_at: Date.now() / 1000,
+        });
         return;
     }
 };

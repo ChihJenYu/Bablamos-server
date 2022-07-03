@@ -498,14 +498,12 @@ const readPost = (req, res) => {
         newsfeed.post(`/update/recalc?type=new&user-id=${user_id}`, {
             posts: req.body.posts,
         });
-        console.log("Firing recalc request, type: reading fresh posts");
         res.sendStatus(200);
     } else if (type === "read") {
         // recalculation of read posts
         newsfeed.post(`/update/recalc?type=read&user-id=${user_id}`, {
             posts: req.body.posts,
         });
-        console.log("Firing recalc request, type: incrementing post views");
         res.sendStatus(200);
     }
 };
