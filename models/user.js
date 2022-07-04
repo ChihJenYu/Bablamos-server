@@ -12,17 +12,21 @@ const FRIENDS_SUGGESTIONS = 5;
 class User {
     // password is raw; hashing occurs in save method
     constructor({
+        id,
         username,
         email,
         password,
-        include_profile_pic,
+        user_profile_pic,
+        user_cover_pic,
         allow_stranger_follow,
         info,
     }) {
+        this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
-        this.include_profile_pic = include_profile_pic || 0;
+        this.user_profile_pic = user_profile_pic || 0;
+        this.user_cover_pic = user_cover_pic || 0;
         this.allow_stranger_follow = allow_stranger_follow || 0;
         this.info = info || null;
     }
@@ -31,6 +35,12 @@ class User {
         return has_profile
             ? CLOUDFRONT_DOMAIN_NAME + `/user/${id}/profile.jpg`
             : CLOUDFRONT_DOMAIN_NAME + `/user/default.jpg`;
+    }
+
+    static generateCoverUrl({ has_cover, id }) {
+        return has_cover
+            ? CLOUDFRONT_DOMAIN_NAME + `/user/${id}/cover.jpg`
+            : CLOUDFRONT_DOMAIN_NAME + `/user/default-cover.jpg`;
     }
 
     // return the user packets
@@ -129,7 +139,7 @@ class User {
                     username: this.username,
                     email: this.email,
                     profile_pic_url: User.generatePictureUrl({
-                        has_profile: this.include_profile_pic == 1,
+                        has_profile: this.user_profile_pic == 1,
                         id,
                     }),
                     allow_stranger_follow: this.allow_stranger_follow,
@@ -145,18 +155,44 @@ class User {
         }
     }
 
-    async save() {
+    async save(update) {
+        if (this.id) {
+            // is update
+            const ALLOWED_UPDATE_COLS = [
+                "allow_stranger_follow",
+                "user_profile_pic",
+                "user_cover_pic",
+                "info",
+            ];
+            for (let col of Object.keys(update)) {
+                if (!ALLOWED_UPDATE_COLS.includes(col)) {
+                    console.log(col);
+                    throw new Error("Invalid update argument");
+                }
+            }
+            let { setClause, args } = db.translateUpdate(update);
+            await db.pool.query(
+                `UPDATE user ${setClause} WHERE id = ?`,
+                args.concat([this.id])
+            );
+            return;
+        }
         if (!validator.isEmail(this.email)) {
             throw new Error("Invalid email");
         }
 
         const hashedPassword = await bcrypt.hash(this.password, SALT_ROUNDS);
         this.password = hashedPassword;
-        const query = `INSERT INTO user (username, email, password, user_profile_pic, allow_stranger_follow, info) VALUES (?, ?, ?, ?, ?, ?)`;
-        const [{ insertId: user_id }] = await db.pool.query(
-            query,
-            Object.values(this)
-        );
+        const query = `INSERT INTO user (username, email, password, user_profile_pic, user_cover_pic, allow_stranger_follow, info) VALUES (?, ?, ?, ?, ?, ?)`;
+        const [{ insertId: user_id }] = await db.pool.query(query, [
+            this.username,
+            this.email,
+            this.password,
+            this.user_profile_pic,
+            this.user_cover_pic,
+            this.allow_stranger_follow,
+            this.info,
+        ]);
         return user_id;
     }
 
@@ -273,7 +309,7 @@ class User {
             return {
                 ...friend,
                 profile_pic_url: User.generatePictureUrl({
-                    has_profile: friend.user_profile_pic == 1,
+                    has_cover: friend.user_profile_pic == 1,
                     id: friend.id,
                 }),
             };
@@ -284,7 +320,7 @@ class User {
     // user info, allow_stranger_follow, friend_status, follow_status and friend count
     static async getUserInfo({ user_asking, user_in_question }) {
         const [result] = await db.pool.query(
-            `select u.info as user_info, u.user_profile_pic, u.username, 
+            `select u.info as user_info, u.user_profile_pic, u.user_cover_pic, u.username, 
             sum(case when 
             f.status = "accepted" then 1 else 0 end) as friend_count,
             fsv.status as friend_status, 

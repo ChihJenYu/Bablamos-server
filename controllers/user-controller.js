@@ -94,7 +94,9 @@ const userSignUp = async (req, res) => {
         } else {
             // no profile picture
             const responseBody = await insertNewUser(false, "native", req.body);
-            responseBody.user.profile_pic_url = User.generatePictureUrl();
+            responseBody.user.profile_pic_url = User.generatePictureUrl({
+                has_profile: false,
+            });
             res.status(201).send(responseBody);
         }
     } catch (e) {
@@ -116,6 +118,90 @@ const userSignIn = async (req, res) => {
     } catch (e) {
         console.log(e);
         res.status(400).send({ error: e.message });
+        return;
+    }
+};
+
+const editUserProfile = async (req, res) => {
+    const userId = req.user.id;
+    if (req.body.allow_stranger_follow || req.body.info) {
+        const user = new User({ id: userId });
+        await user.save(req.body);
+        res.sendStatus(200);
+        return;
+    }
+    if (req.files) {
+        let profilePicChanged;
+        let coverPicChanged;
+        const s3 = new aws.S3({
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        });
+        if (req.files["profile-pic"]) {
+            profilePicChanged = 1;
+            // await s3
+            //     .upload({
+            //         Bucket: process.env.AWS_S3_BUCKET_NAME,
+            //         Key: `user/${userId}/profile.jpg`,
+            //         Body: req.files["profile-pic"][0].buffer,
+            //         Headers: {
+
+            //         }
+            //     })
+            //     .promise();
+            await s3
+                .putObject({
+                    Bucket: process.env.AWS_S3_BUCKET_NAME,
+                    Key: `user/${userId}/profile.jpg`,
+                    Body: req.files["profile-pic"][0].buffer,
+                    CacheControl: "no-cache",
+                    Expires: new Date(),
+                })
+                .promise();
+        }
+        if (req.files["cover-pic"]) {
+            coverPicChanged = 1;
+            // await s3
+            //     .upload({
+            //         Bucket: process.env.AWS_S3_BUCKET_NAME,
+            //         Key: `user/${userId}/cover.jpg`,
+            //         Body: req.files["cover-pic"][0].buffer,
+            //     })
+            //     .promise();
+            await s3
+                .putObject({
+                    Bucket: process.env.AWS_S3_BUCKET_NAME,
+                    Key: `user/${userId}/cover.jpg`,
+                    Body: req.files["cover-pic"][0].buffer,
+                    CacheControl: "no-cache",
+                    Expires: new Date(),
+                })
+                .promise();
+        }
+        const user = new User({ id: userId });
+        let updateArgs = {};
+        let responseBody = {};
+        if (profilePicChanged) {
+            updateArgs.user_profile_pic = 1;
+            responseBody.profile_pic_url = User.generatePictureUrl({
+                has_profile: true,
+                id: userId,
+            });
+        }
+        if (coverPicChanged) {
+            updateArgs.user_cover_pic = 1;
+            responseBody.cover_pic_url = User.generateCoverUrl({
+                has_cover: true,
+                id: userId,
+            });
+        }
+
+        console.log(responseBody);
+
+        await user.save(updateArgs);
+        res.send({
+            data: responseBody,
+        });
         return;
     }
 };
@@ -294,6 +380,7 @@ const getUserInfo = async (req, res) => {
             username,
             friend_count,
             user_profile_pic,
+            user_cover_pic,
             friend_status,
             follow_status,
             allow_stranger_follow,
@@ -314,6 +401,10 @@ const getUserInfo = async (req, res) => {
             username,
             profile_pic_url: User.generatePictureUrl({
                 has_profile: user_profile_pic == 1,
+                id: userInQuestion,
+            }),
+            cover_pic_url: User.generateCoverUrl({
+                has_cover: user_cover_pic == 1,
                 id: userInQuestion,
             }),
             friend_count,
@@ -511,6 +602,7 @@ const readPost = (req, res) => {
 module.exports = {
     userSignUp,
     userSignIn,
+    editUserProfile,
     getNewsfeed,
     getUserInfo,
     userLikesEdge,

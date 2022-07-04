@@ -22,6 +22,10 @@ const getNewsfeed = async (req, res) => {
             },
         }
     );
+    if (!user) {
+        res.send({ data: [] });
+        return;
+    }
     const newsfeed = user.newsfeed.map((nf) => {
         return { post_id: nf.post_id, is_new: nf.is_new };
     });

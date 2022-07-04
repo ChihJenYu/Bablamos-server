@@ -1,7 +1,8 @@
 const multer = require("multer");
 
 const multerMiddleware = (input_name_attr) =>
-    multer({ dest: null }).single(input_name_attr);
+    // multer({ dest: null }).single(input_name_attr);
+    multer().any();
 
 const getValueOr = (table, fl, sl, tl, or) => {
     try {
