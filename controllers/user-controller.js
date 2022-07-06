@@ -139,16 +139,6 @@ const editUserProfile = async (req, res) => {
         });
         if (req.files["profile-pic"]) {
             profilePicChanged = 1;
-            // await s3
-            //     .upload({
-            //         Bucket: process.env.AWS_S3_BUCKET_NAME,
-            //         Key: `user/${userId}/profile.jpg`,
-            //         Body: req.files["profile-pic"][0].buffer,
-            //         Headers: {
-
-            //         }
-            //     })
-            //     .promise();
             await s3
                 .putObject({
                     Bucket: process.env.AWS_S3_BUCKET_NAME,
@@ -161,13 +151,6 @@ const editUserProfile = async (req, res) => {
         }
         if (req.files["cover-pic"]) {
             coverPicChanged = 1;
-            // await s3
-            //     .upload({
-            //         Bucket: process.env.AWS_S3_BUCKET_NAME,
-            //         Key: `user/${userId}/cover.jpg`,
-            //         Body: req.files["cover-pic"][0].buffer,
-            //     })
-            //     .promise();
             await s3
                 .putObject({
                     Bucket: process.env.AWS_S3_BUCKET_NAME,
@@ -277,6 +260,9 @@ const getNewsfeed = async (req, res) => {
         for (let i = 0; i < newsfeedToReturn.length; i++) {
             const feedId = newsfeedToReturn[i].post_id;
             const feedContent = await Feed.getFeedDetail(feedId, userAsking);
+            if (!feedContent) {
+                continue;
+            }
             feedContent.profile_pic_url = User.generatePictureUrl({
                 has_profile: feedContent.user_profile_pic == 1,
                 id: feedContent.user_id,

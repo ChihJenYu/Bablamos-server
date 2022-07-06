@@ -425,7 +425,7 @@ class Feed extends Post {
                 : [post_id, post_id, post_id, post_id, post_id]
         );
         if (feedDetail.length === 0) {
-            return {};
+            return null;
         }
         const latestComments = await Feed.getLatestComments(
             post_id,
