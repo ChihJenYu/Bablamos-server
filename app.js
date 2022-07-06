@@ -27,6 +27,7 @@ app.use("/api", [
     require("./routes/user-route"),
     require("./routes/tag-route"),
     require("./routes/notification-route"),
+    require("./routes/search-route"),
 ]);
 
 app.use((err, req, res, next) => {
