@@ -7,7 +7,6 @@ const COMMENT_WEIGHT = 2;
 const LIKE_WEIGHT = 1;
 
 // EDGE WEIGHT
-const EDGE_TAG_WEIGHT = 4;
 const POP_WEIGHT = 2;
 const EDGE_TYPE_WEIGHT = 1;
 const ENV = "dev"; // in dev query from friendship instead of followship
@@ -344,6 +343,19 @@ const generateUserAffinityTable = async () => {
     return userAffinityTable;
 };
 
+const calcAvgWeightOnEventfulEdge = async (my_user_id, post_id) => {
+    const [averageWeightOnEventfulEdge] = await db.pool.query(
+        `select avg(parent.weight) as avg_weight from (
+                    select pt.tag_id, utw.weight from post_tag pt
+                    join user_tag_weight utw on pt.tag_id = utw.tag_id
+                    where utw.user_id = ? and pt.post_id = ?) parent
+                    `,
+        [my_user_id, post_id]
+    );
+    const averageWeight = +averageWeightOnEventfulEdge[0].avg_weight;
+    return averageWeight;
+};
+
 const calculateLikeScore = (lc) => lc;
 
 const calculateCommentScore = (cc) => 2 * cc;
@@ -357,19 +369,12 @@ const calculateEdgeWeight = async (feed, my_user_id) => {
     // edge type
     const edgeTypeScore = feed.shared_post_id ? 3 : 4;
 
-    // // average edge tag weight of this user for this feed item
-    // const averageWeight = await calcAvgWeightOnEventfulEdge(
-    //     my_user_id,
-    //     feed.id
-    // );
-
     return (
         EDGE_TYPE_WEIGHT * edgeTypeScore +
         POP_WEIGHT *
             (calculateLikeScore(feed.like_count) +
                 calculateCommentScore(feed.comment_count) +
-                calculateShareScore(feed.share_count)) +
-        EDGE_TAG_WEIGHT * averageWeight
+                calculateShareScore(feed.share_count))
     );
 };
 

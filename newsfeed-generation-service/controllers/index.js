@@ -45,7 +45,7 @@ const updateNewsfeed = async (req, res) => {
 
         followerIds = followerIds.map((id) => id.id);
 
-        // push fresh feed immediately to top
+        // push fresh feed to followers
         if (httpMethod === "POST") {
             const timestampStart = Date.now();
             await User.updateMany(
