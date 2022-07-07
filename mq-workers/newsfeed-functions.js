@@ -114,83 +114,147 @@ const recalcAffinityTable = async () => {
     );
 };
 
-const recalcTimeDecayFactor = async () => {
-    console.log("Begin job: recalculating time decay factor");
-    // harder for sharding based on user id?
-    const allPostIds = await Post.find(["id", "user_id", "created_at"]);
+// type 1 (per 5m) & 2 (per 24 hour)
+const recalcTimeDecayFactor = async ({ type }) => {
     const beginTime = Date.now();
-    for (let post of allPostIds) {
-        const postBeginTime = Date.now();
-        const { id, user_id, created_at } = post;
-        const timeDecayFactor = calculateTimeDecayFactor({ created_at });
-        let allFollowerIds = await getUserIds({
-            type: "get_followers",
-            user_id,
-        });
-        allFollowerIds = allFollowerIds.map((id) => id.id);
-        for (let followerId of allFollowerIds) {
-            const updatedUser = await User.findOneAndUpdate(
-                {
-                    user_id: followerId,
-                    "newsfeed.post_id": id,
+    console.log("Begin job: recalculating time decay factor");
+    if (type === 1) {
+        await User.updateMany(
+            {},
+            {
+                $set: {
+                    "newsfeed.$[el].time_decay_factor": 1.1,
                 },
-                {
-                    $set: {
-                        "newsfeed.$.time_decay_factor": timeDecayFactor,
+            },
+            {
+                arrayFilters: [
+                    {
+                        "el.created_at": {
+                            $lte: Date.now() / 1000 - 60 * 10,
+                            $gte: Date.now() / 1000 - 60 * 60,
+                        },
                     },
-                },
-                {
-                    new: true,
-                }
-            );
-            let matchingNewsfeedEles = updatedUser.newsfeed.filter(
-                (el) => el.post_id == id
-            );
-            for (let i = 0; i < matchingNewsfeedEles.length; i++) {
-                const el = matchingNewsfeedEles[i];
-                el.edge_rank_score =
-                    (el.affinity + el.edge_weight) /
-                    el.time_decay_factor /
-                    Math.pow(1.25, el.views);
-                matchingNewsfeedEles[i] = el;
+                ],
             }
-            // remove from document where newsfeed element's user_id = user
-            await User.updateOne(
-                {
-                    user_id: followerId,
+        );
+        await User.updateMany(
+            {},
+            {
+                $set: {
+                    "newsfeed.$[el].time_decay_factor": 1.2,
                 },
-                {
-                    $pull: {
-                        newsfeed: {
-                            post_id: id,
+            },
+            {
+                arrayFilters: [
+                    {
+                        "el.created_at": {
+                            $lte: Date.now() / 1000 - 60 * 60 * 1,
+                            $gte: Date.now() / 1000 - 60 * 60 * 6,
                         },
                     },
-                }
-            );
-
-            // add in new newsfeed element with updated edge rank score
-            await User.updateOne(
-                {
-                    user_id: followerId,
+                ],
+            }
+        );
+        await User.updateMany(
+            {},
+            {
+                $set: {
+                    "newsfeed.$[el].time_decay_factor": 1.3,
                 },
-                {
-                    $push: {
-                        newsfeed: {
-                            $each: matchingNewsfeedEles,
-                            $sort: {
-                                edge_rank_score: -1,
-                            },
+            },
+            {
+                arrayFilters: [
+                    {
+                        "el.created_at": {
+                            $lte: Date.now() / 1000 - 60 * 60 * 6,
+                            $gte: Date.now() / 1000 - 60 * 60 * 24,
                         },
                     },
-                }
-            );
-        }
-        console.log(
-            `Updating time decay factor and edge rank score of post #${id} in all followers took ${
-                Date.now() - postBeginTime
-            }ms`
+                ],
+            }
+        );
+    } else {
+        await User.updateMany(
+            {},
+            {
+                $mul: {
+                    "newsfeed.$[el].time_decay_factor": 1.1,
+                },
+            },
+            {
+                arrayFilters: [
+                    {
+                        "el.created_at": {
+                            $lte: Date.now() / 1000 - 60 * 60 * 24,
+                        },
+                        "el.time_decay_factor": {
+                            $gte: 1.4,
+                        },
+                    },
+                ],
+            }
+        );
+        await User.updateMany(
+            {},
+            {
+                $set: {
+                    "newsfeed.$[el].time_decay_factor": 1.4,
+                },
+            },
+            {
+                arrayFilters: [
+                    {
+                        "el.created_at": {
+                            $lte: Date.now() / 1000 - 60 * 60 * 24,
+                        },
+                        "el.time_decay_factor": {
+                            $lt: 1.4,
+                        },
+                    },
+                ],
+            }
         );
     }
+    await User.aggregate([
+        {
+            $addFields: {
+                newsfeed: {
+                    $map: {
+                        input: "$newsfeed",
+                        as: "n",
+                        in: {
+                            $mergeObjects: [
+                                "$$n",
+                                {
+                                    edge_rank_score: {
+                                        $divide: [
+                                            {
+                                                $divide: [
+                                                    {
+                                                        $sum: [
+                                                            "$$n.affinity",
+                                                            "$$n.edge_weight",
+                                                        ],
+                                                    },
+                                                    "$$n.time_decay_factor",
+                                                ],
+                                            },
+                                            {
+                                                $pow: [1.25, "$$n.views"],
+                                            },
+                                        ],
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        },
+        {
+            $out: "users",
+        },
+    ]);
     console.log(
         `Total time elapsed: ${
             Date.now() - beginTime
@@ -208,7 +272,6 @@ const checkPopCount = async ({ post_id, type }) => {
         post_id,
         metric: type,
     });
-    post_id = data.post_id;
     let pop_count;
     let newPopSubScore;
     if (type == "like") {
@@ -230,6 +293,8 @@ const checkPopCount = async ({ post_id, type }) => {
         }
         newPopSubScore = calculateShareScore(data.share_count);
     }
+
+    const [{ user_id }] = await Post.find(["user_id"], { id: post_id });
 
     let allFollowerIds = await getUserIds({
         type: "get_followers",
@@ -303,7 +368,7 @@ const checkPopCount = async ({ post_id, type }) => {
             el.edge_rank_score =
                 (el.affinity + el.edge_weight) /
                 el.time_decay_factor /
-                Math.pow(1.25, views);
+                Math.pow(1.25, el.views);
             matchingNewsfeedEles[i] = el;
         }
         await User.updateOne(
@@ -333,6 +398,7 @@ const checkPopCount = async ({ post_id, type }) => {
                 },
             }
         );
+        console.log("User's newsfeed popularity update complete");
     }
 
     const postEndTime = Date.now();

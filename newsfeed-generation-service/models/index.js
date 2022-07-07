@@ -397,11 +397,11 @@ const calculateEdgeWeight = async (feed, my_user_id) => {
     // edge type
     const edgeTypeScore = feed.shared_post_id ? 3 : 4;
 
-    // average edge tag weight of this user for this feed item
-    const averageWeight = await calcAvgWeightOnEventfulEdge(
-        my_user_id,
-        feed.id
-    );
+    // // average edge tag weight of this user for this feed item
+    // const averageWeight = await calcAvgWeightOnEventfulEdge(
+    //     my_user_id,
+    //     feed.id
+    // );
 
     return (
         EDGE_TYPE_WEIGHT * edgeTypeScore +
@@ -418,7 +418,7 @@ const calculateTimeDecayFactor = (feed) => {
     const nowUnix = Date.now() / 1000;
     const timeDiff = nowUnix - feedCreatedAtUnix;
     if (timeDiff < 60 * 10) {
-        return 1;
+        return 0.25;
     } else if ((timeDiff >= 60 * 10) & (timeDiff < 60 * 60)) {
         return 1.1;
     } else if ((timeDiff >= 60 * 60 * 1) & (timeDiff < 60 * 60 * 6)) {
@@ -427,7 +427,7 @@ const calculateTimeDecayFactor = (feed) => {
         return 1.3;
     } else {
         const daysPassed = Math.floor(timeDiff / (60 * 60 * 24));
-        return 1.4 * Math.pow(1.01, daysPassed);
+        return 1.4 * Math.pow(1.1, daysPassed);
     }
 };
 
