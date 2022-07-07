@@ -69,6 +69,16 @@ const UserSchema = mongoose.Schema({
             },
         },
     ],
+    affinity_with_self: [
+        {
+            user_id: {
+                type: Number,
+            },
+            affinity_with_self: {
+                type: Number,
+            },
+        },
+    ],
 });
 
 const User = mongoose.model("User", UserSchema);

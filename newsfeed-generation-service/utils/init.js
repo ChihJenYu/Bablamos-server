@@ -10,6 +10,7 @@ const {
 } = require("../models");
 const Feed = require("../../models/feed");
 const User = require("../models/user");
+const redisClient = require("../redis");
 
 const initialization = async () => {
     const beginTime = Date.now();
@@ -93,11 +94,35 @@ const initialization = async () => {
                 Object.keys(userAffinityTable[userId]).length
             }ms per user)`
         );
+
+        // other user's affinity with user
+        let affinityWithSelfList = [];
+        const findAffinityWithSelfStartTime = Date.now();
+        for (let otherUserId of userIds) {
+            otherUserId = +otherUserId;
+            if (!userAffinityTable[otherUserId][userId]) {
+                continue;
+            }
+            affinityWithSelfList.push({
+                user_id: otherUserId,
+                affinity_with_self: userAffinityTable[otherUserId][userId],
+            });
+        }
+        const findAffinityWithSelfEndTime = Date.now();
+        console.log(
+            `Finding affinity_with_self list took ${
+                findAffinityWithSelfEndTime - findAffinityWithSelfStartTime
+            }ms for ${affinityWithSelfList.length} users (${
+                (findAffinityWithSelfEndTime - findAffinityWithSelfStartTime) /
+                affinityWithSelfList.length
+            }ms per user)`
+        );
         const insertBeginTime = Date.now();
         const newUser = new User({
             user_id: userId,
             newsfeed: feedsToInsert,
             affinity: affinityList,
+            affinity_with_self: affinityWithSelfList,
         });
         await newUser.save();
         const insertCompleteTime = Date.now();
@@ -106,9 +131,21 @@ const initialization = async () => {
                 insertCompleteTime - insertBeginTime
             }ms`
         );
+
+        const redisInsertBeginTime = Date.now();
+        for (let otherUser of affinityWithSelfList) {
+            await redisClient.HSET(`affinity_with_self_user_${userId}`, "" + otherUser.user_id, "" + otherUser.affinity_with_self)
+        }
+        const redisInsertCompleteTime = Date.now();
+        console.log(
+            `Inserting user's affinity_with_self dictionary into redis took ${
+                redisInsertCompleteTime - redisInsertBeginTime
+            }ms`
+        );
+
         console.log(
             `Total time elapsed: ${
-                insertCompleteTime - beginTime
+                Date.now() - beginTime
             }ms\n-----------------------------------------`
         );
     }

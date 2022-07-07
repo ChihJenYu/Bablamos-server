@@ -76,7 +76,8 @@ const updateNewsfeed = async (req, res) => {
                 }ms`
             );
         }
-        // recalculate edge rank score and sort
+        // deprecated
+        // editing post does not affect edge rank score
         else if (httpMethod === "PATCH") {
             const timestampStart = Date.now();
             for (let followerId of followerIds) {
@@ -166,6 +167,8 @@ const updateNewsfeed = async (req, res) => {
 const recalcNewsfeed = async (req, res) => {
     const type = req.query.type;
     const userId = +req.query["user-id"];
+    // deprecated
+    // posts are treated equally regardless of freshness
     if (type === "new") {
         const timestampStart = Date.now();
         const readPostIds = req.body.posts;
@@ -294,17 +297,7 @@ const recalcNewsfeed = async (req, res) => {
         res.sendStatus(200);
     }
 };
-
-const MESSAGE_WEIGHT = 4;
-const MENTION_WEIGHT = 3;
-const COMMENT_WEIGHT = 2;
-const LIKE_WEIGHT = 1;
-
-// EDGE WEIGHT
-const EDGE_TAG_WEIGHT = 4;
 const POP_WEIGHT = 2;
-const EDGE_TYPE_WEIGHT = 1;
-
 
 const recalculateEdgeRankScore = async ({ method, cond, check_popularity }) => {
     const updatePopularity = {
