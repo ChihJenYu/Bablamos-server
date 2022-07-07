@@ -7,7 +7,6 @@ const {
 } = require("../models");
 const User = require("../models/user");
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
-
 const getNewsfeed = async (req, res) => {
     const userId = +req.query["user-id"];
     const from = +req.query.from;
@@ -295,5 +294,130 @@ const recalcNewsfeed = async (req, res) => {
         res.sendStatus(200);
     }
 };
+
+const MESSAGE_WEIGHT = 4;
+const MENTION_WEIGHT = 3;
+const COMMENT_WEIGHT = 2;
+const LIKE_WEIGHT = 1;
+
+// EDGE WEIGHT
+const EDGE_TAG_WEIGHT = 4;
+const POP_WEIGHT = 2;
+const EDGE_TYPE_WEIGHT = 1;
+
+
+const recalculateEdgeRankScore = async ({ method, cond, check_popularity }) => {
+    const updatePopularity = {
+        $addFields: {
+            newsfeed: {
+                $map: {
+                    input: "$newsfeed",
+                    as: "n",
+                    in: {
+                        $mergeObjects: [
+                            "$$n",
+                            {
+                                popularity: {
+                                    $sum: [
+                                        {
+                                            $multiply: [1, "$$n.like_score"],
+                                        },
+                                        {
+                                            $multiply: [2, "$$n.comment_score"],
+                                        },
+                                        {
+                                            $multiply: [3, "$$n.share_score"],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+    };
+    const updateEdgeWeight = {
+        $addFields: {
+            newsfeed: {
+                $map: {
+                    input: "$newsfeed",
+                    as: "n",
+                    in: {
+                        $mergeObjects: [
+                            "$$n",
+                            {
+                                edge_weight: {
+                                    $sum: [
+                                        "$$n.edge_weight",
+                                        {
+                                            $multiply: [
+                                                POP_WEIGHT,
+                                                "$$n.popularity",
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+    };
+    const updateEdgeRankScore = {
+        $addFields: {
+            newsfeed: {
+                $map: {
+                    input: "$newsfeed",
+                    as: "n",
+                    in: {
+                        $mergeObjects: [
+                            "$$n",
+                            {
+                                test_field: {
+                                    $divide: [
+                                        {
+                                            $divide: [
+                                                {
+                                                    $sum: [
+                                                        "$$n.affinity",
+                                                        "$$n.edge_weight",
+                                                    ],
+                                                },
+                                                "$$n.time_decay_factor",
+                                            ],
+                                        },
+                                        {
+                                            $pow: [1.25, "$$n.views"],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+    };
+    const pipelines = check_popularity
+        ? [updatePopularity, updateEdgeRankScore, updateEdgeRankScore]
+        : [updateEdgeRankScore];
+
+    if (method === "updateOne") {
+        await User.updateOne(cond, pipelines);
+    } else {
+        await User.updateMany(cond, pipelines);
+    }
+};
+
+(async () => {
+    await recalculateEdgeRankScore({
+        type: "updateOne",
+        cond: { user_id: 3 },
+        check_popularity: true,
+    });
+    console.log("Done");
+})();
 
 module.exports = { getNewsfeed, updateNewsfeed, recalcNewsfeed };

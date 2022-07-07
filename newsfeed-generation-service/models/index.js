@@ -45,33 +45,6 @@ const getUserIds = async (arg) => {
     }
 };
 
-const calcOutgoingLikesOnUserEventfulEdge = async (
-    my_user_id,
-    other_user_id
-) => {
-    const [outgoingOnEventfulEdge] = await db.pool.query(
-        `select count(*) as like_count from
-        (select * from like_user where user_id = ?) post_like_user
-        join post p on post_like_user.post_id = p.id
-        where p.user_id = ?`,
-        [my_user_id, other_user_id]
-    );
-    const outgoingLikeOnEventfulEdge = outgoingOnEventfulEdge[0].like_count;
-    return outgoingLikeOnEventfulEdge;
-};
-
-const calcIncomingLikesOnMyEventfulEdge = async (my_user_id, other_user_id) => {
-    const [incomingOnEventfulEdge] = await db.pool.query(
-        `select count(*) as like_count from
-        (select * from like_user where user_id = ?) post_like_user
-        join post p on post_like_user.post_id = p.id
-        where p.user_id = ?`,
-        [other_user_id, my_user_id]
-    );
-    const incomingLikeOnEventfulEdge = incomingOnEventfulEdge[0].like_count;
-    return incomingLikeOnEventfulEdge;
-};
-
 // table of how many times each user id has liked my post
 // type: eventful_edge, comment
 const generateUserLikesTable = async () => {
@@ -369,19 +342,6 @@ const generateUserAffinityTable = async () => {
         }
     }
     return userAffinityTable;
-};
-
-const calcAvgWeightOnEventfulEdge = async (my_user_id, post_id) => {
-    const [averageWeightOnEventfulEdge] = await db.pool.query(
-        `select avg(parent.weight) as avg_weight from (
-                    select pt.tag_id, utw.weight from post_tag pt
-                    join user_tag_weight utw on pt.tag_id = utw.tag_id
-                    where utw.user_id = ? and pt.post_id = ?) parent
-                    `,
-        [my_user_id, post_id]
-    );
-    const averageWeight = +averageWeightOnEventfulEdge[0].avg_weight;
-    return averageWeight;
 };
 
 const calculateLikeScore = (lc) => lc;
