@@ -35,7 +35,7 @@ const createPost = async (req, res) => {
 
     // carry created_at
     newsfeed.post(
-        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${newPost.id}`
+        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${newPost.id}&created-at=${newPost.created_at}&edge-type=${newPost.shared_post_id ? "share" : "create"}`
     );
 
     if (newPost.shared_post_id) {

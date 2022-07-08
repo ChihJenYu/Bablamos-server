@@ -16,9 +16,7 @@ const getNewsfeed = async (req, res) => {
             newsfeed: {
                 $slice: [from, NEWSFEED_PER_PAGE_FOR_WEB_SERVER],
             },
-            affinity: {
-                $slice: 1, // inclusion projection to return nothing?
-            },
+            affinity: 0,
         }
     );
     if (!user) {
@@ -35,6 +33,8 @@ const updateNewsfeed = async (req, res) => {
     const method = req.query.method;
     const userId = +req.query["user-id"];
     const postId = +req.query["post-id"];
+    const createdAt = req.query["created-at"];
+    const edgeType = req.query["edge-type"];
     const httpMethod = req.method;
 
     if (method === "write") {
@@ -48,28 +48,60 @@ const updateNewsfeed = async (req, res) => {
         // push fresh feed to followers
         if (httpMethod === "POST") {
             const timestampStart = Date.now();
-            await User.updateMany(
-                {
-                    user_id: {
-                        $in: followerIds,
-                    },
-                },
-                {
-                    $push: {
-                        newsfeed: {
-                            $each: [
-                                {
-                                    post_id: postId,
-                                    edge_rank_score: 0,
-                                    is_new: true,
-                                    views: 0,
+            const posterObj = await User.findOne(
+                { user_id: userId },
+                { affinity_with_self: 1 }
+            );
+            const affinityWithSelf = {};
+            posterObj.affinity_with_self.forEach((user) => {
+                affinityWithSelf[user.user_id] = user.affinity_with_self;
+            });
+
+            const bulkWrites = [];
+            for (let followerId of followerIds) {
+                bulkWrites.push({
+                    updateOne: {
+                        filter: {
+                            user_id: followerId,
+                        },
+                        update: {
+                            $push: {
+                                newsfeed: {
+                                    $each: [
+                                        {
+                                            post_id: postId,
+                                            user_id: userId,
+                                            affinity:
+                                                affinityWithSelf[followerId],
+                                            edge_weight:
+                                                edgeType === "share" ? 3 : 4,
+                                            like_score: 0,
+                                            comment_score: 0,
+                                            share_score: 0,
+                                            popularity: 0,
+                                            time_decay_factor: 0.01,
+                                            created_at: createdAt,
+                                            edge_rank_score:
+                                                (affinityWithSelf[followerId] +
+                                                    edgeType ===
+                                                "share"
+                                                    ? 3
+                                                    : 4) / 0.01,
+                                            views: 0,
+                                        },
+                                    ],
+                                    $sort: {
+                                        edge_rank_score: -1,
+                                    },
                                 },
-                            ],
-                            $position: 0,
+                            },
                         },
                     },
-                }
-            );
+                });
+            }
+
+            await User.bulkWrite(bulkWrites);
+
             console.log(
                 `Push of post #${postId} to followers newsfeed complete; took ${
                     Date.now() - timestampStart
@@ -297,120 +329,5 @@ const recalcNewsfeed = async (req, res) => {
         res.sendStatus(200);
     }
 };
-const POP_WEIGHT = 2;
-
-const recalculateEdgeRankScore = async ({ method, cond, check_popularity }) => {
-    const updatePopularity = {
-        $addFields: {
-            newsfeed: {
-                $map: {
-                    input: "$newsfeed",
-                    as: "n",
-                    in: {
-                        $mergeObjects: [
-                            "$$n",
-                            {
-                                popularity: {
-                                    $sum: [
-                                        {
-                                            $multiply: [1, "$$n.like_score"],
-                                        },
-                                        {
-                                            $multiply: [2, "$$n.comment_score"],
-                                        },
-                                        {
-                                            $multiply: [3, "$$n.share_score"],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-        },
-    };
-    const updateEdgeWeight = {
-        $addFields: {
-            newsfeed: {
-                $map: {
-                    input: "$newsfeed",
-                    as: "n",
-                    in: {
-                        $mergeObjects: [
-                            "$$n",
-                            {
-                                edge_weight: {
-                                    $sum: [
-                                        "$$n.edge_weight",
-                                        {
-                                            $multiply: [
-                                                POP_WEIGHT,
-                                                "$$n.popularity",
-                                            ],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-        },
-    };
-    const updateEdgeRankScore = {
-        $addFields: {
-            newsfeed: {
-                $map: {
-                    input: "$newsfeed",
-                    as: "n",
-                    in: {
-                        $mergeObjects: [
-                            "$$n",
-                            {
-                                test_field: {
-                                    $divide: [
-                                        {
-                                            $divide: [
-                                                {
-                                                    $sum: [
-                                                        "$$n.affinity",
-                                                        "$$n.edge_weight",
-                                                    ],
-                                                },
-                                                "$$n.time_decay_factor",
-                                            ],
-                                        },
-                                        {
-                                            $pow: [1.25, "$$n.views"],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-        },
-    };
-    const pipelines = check_popularity
-        ? [updatePopularity, updateEdgeRankScore, updateEdgeRankScore]
-        : [updateEdgeRankScore];
-
-    if (method === "updateOne") {
-        await User.updateOne(cond, pipelines);
-    } else {
-        await User.updateMany(cond, pipelines);
-    }
-};
-
-(async () => {
-    await recalculateEdgeRankScore({
-        type: "updateOne",
-        cond: { user_id: 3 },
-        check_popularity: true,
-    });
-    console.log("Done");
-})();
 
 module.exports = { getNewsfeed, updateNewsfeed, recalcNewsfeed };

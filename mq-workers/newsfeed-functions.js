@@ -256,26 +256,6 @@ const recalcTimeDecayFactor = async ({ type }) => {
         await User.updateMany(
             {},
             {
-                $set: {
-                    "newsfeed.$[el].time_decay_factor": 1.4,
-                },
-            },
-            {
-                arrayFilters: [
-                    {
-                        "el.created_at": {
-                            $lte: Date.now() / 1000 - 60 * 60 * 24,
-                        },
-                        "el.time_decay_factor": {
-                            $lt: 1.4,
-                        },
-                    },
-                ],
-            }
-        );
-        await User.updateMany(
-            {},
-            {
                 $mul: {
                     "newsfeed.$[el].time_decay_factor": 1.1,
                 },
@@ -288,6 +268,26 @@ const recalcTimeDecayFactor = async ({ type }) => {
                         },
                         "el.time_decay_factor": {
                             $gte: 1.4,
+                        },
+                    },
+                ],
+            }
+        );
+        await User.updateMany(
+            {},
+            {
+                $set: {
+                    "newsfeed.$[el].time_decay_factor": 1.4,
+                },
+            },
+            {
+                arrayFilters: [
+                    {
+                        "el.created_at": {
+                            $lte: Date.now() / 1000 - 60 * 60 * 24,
+                        },
+                        "el.time_decay_factor": {
+                            $lt: 1.4,
                         },
                     },
                 ],

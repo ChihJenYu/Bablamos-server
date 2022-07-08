@@ -383,7 +383,7 @@ const calculateTimeDecayFactor = (feed) => {
     const nowUnix = Date.now() / 1000;
     const timeDiff = nowUnix - feedCreatedAtUnix;
     if (timeDiff < 60 * 10) {
-        return 0.25;
+        return 0.01;
     } else if ((timeDiff >= 60 * 10) & (timeDiff < 60 * 60)) {
         return 1.1;
     } else if ((timeDiff >= 60 * 60 * 1) & (timeDiff < 60 * 60 * 6)) {
