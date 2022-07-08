@@ -60,7 +60,7 @@ router
     .post([authentication, asyncErrorHandler(userBefriends)]) // action, user-id
     .delete([authentication, asyncErrorHandler(userUnfriends)]); // user-id
 
-router.route("/user").get([authentication, asyncErrorHandler(searchUsers)]);
+router.route("/user/search").get([authentication, asyncErrorHandler(searchUsers)]);
 
 // id (id of user to be followed)
 router

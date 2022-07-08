@@ -1,8 +1,8 @@
+const { ELASTIC_USER_INDEX, ELASTIC_POST_INDEX } = process.env;
+
 const multer = require("multer");
 
-const multerMiddleware = (input_name_attr) =>
-    // multer({ dest: null }).single(input_name_attr);
-    multer().any();
+const multerMiddleware = () => multer().any();
 
 const getValueOr = (table, fl, sl, tl, or) => {
     try {
@@ -20,4 +20,8 @@ const asyncErrorHandler = (fn) => {
     };
 };
 
-module.exports = { multerMiddleware, getValueOr, asyncErrorHandler };
+module.exports = {
+    multerMiddleware,
+    getValueOr,
+    asyncErrorHandler,
+};

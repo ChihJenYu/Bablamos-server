@@ -438,6 +438,24 @@ class Feed extends Post {
             tags: feedDetail[0].tags || [],
             mentioned_users: feedDetail[0].mentioned_users || [],
         });
+        feed.profile_pic_url = User.generatePictureUrl({
+            has_profile: feed.user_profile_pic == 1,
+            id: feed.user_id,
+        });
+        if (feed.shared_post_id) {
+            feed.shared_post_data = await Post.getSharedData(
+                feed.shared_post_id
+            );
+        }
+        feed.latest_comments = feed.latest_comments.map((c) => {
+            return {
+                ...c,
+                profile_pic_url: User.generatePictureUrl({
+                    has_profile: c.user_profile_pic == 1,
+                    id: c.user_id,
+                }),
+            };
+        });
         return feed;
     }
 

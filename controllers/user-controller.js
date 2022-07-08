@@ -1,6 +1,8 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
+const search = require("../apis/search");
+const { ELASTIC_USER_INDEX } = process.env;
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
@@ -10,8 +12,7 @@ const newsfeed = require("../apis/newsfeed");
 const aws = require("aws-sdk");
 const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
-const FRIENDS_RESULTS_PER_PAGE = 8;
-
+const SEARCH_USER_PAGE_SIZE = 8;
 let userTempNewsfeedStorage = {};
 
 // type = "native"
@@ -263,30 +264,6 @@ const getNewsfeed = async (req, res) => {
             if (!feedContent) {
                 continue;
             }
-            feedContent.profile_pic_url = User.generatePictureUrl({
-                has_profile: feedContent.user_profile_pic == 1,
-                id: feedContent.user_id,
-            });
-            delete feedContent.user_profile_pic;
-            feedContent.latest_comments = feedContent.latest_comments.map(
-                (comment) => {
-                    const newObj = {
-                        ...comment,
-                        profile_pic_url: User.generatePictureUrl({
-                            has_profile: comment.user_profile_pic == 1,
-                            id: comment.user_id,
-                        }),
-                    };
-                    delete newObj.user_profile_pic;
-                    return newObj;
-                }
-            );
-            if (feedContent.shared_post_id) {
-                feedContent.shared_post_data = await Post.getSharedData(
-                    feedContent.shared_post_id
-                );
-            }
-            feedContent.is_new = newsfeedToReturn[i].is_new;
             newsfeedToReturn[i] = feedContent;
         }
         res.send({ data: newsfeedToReturn });
@@ -459,28 +436,34 @@ const getUserFriends = async (req, res) => {
     res.send({ data: friends });
 };
 
-// user?kw=
+// /user/search?kw=&paging=
 const searchUsers = async (req, res) => {
-    const { kw } = req.query;
-    let users = await User.find(
-        ["id", "username", "user_profile_pic"],
-        {
-            username: {
-                like: `%${kw}%`,
+    let { kw, paging } = req.query;
+    paging = isNaN(+paging) ? 0 : +paging;
+    let searchResult = await search.get(`/${ELASTIC_USER_INDEX}/_search`, {
+        data: {
+            from: SEARCH_USER_PAGE_SIZE * paging,
+            size: SEARCH_USER_PAGE_SIZE,
+            query: {
+                match: {
+                    username: {
+                        query: kw,
+                        fuzziness: 1,
+                    },
+                },
             },
         },
-        FRIENDS_RESULTS_PER_PAGE
-    );
-    users = users.map((user) => {
-        return {
-            ...user,
-            profile_pic_url: User.generatePictureUrl({
-                has_profile: user.user_profile_pic == 1,
-                id: user.id,
-            }),
-        };
     });
-    res.send({ data: users });
+    searchResult = searchResult.data.hits.hits.map((res) => ({
+        index: "user",
+        user_id: res._source.id,
+        username: res._source.username,
+        profile_pic_url: User.generatePictureUrl({
+            has_profile: res._source.user_profile_pic === 1,
+            id: res._source.id,
+        }),
+    }));
+    res.send({ data: searchResult });
 };
 
 const userBefriends = async (req, res) => {

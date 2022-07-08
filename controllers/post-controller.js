@@ -1,7 +1,10 @@
 const Post = require("../models/post");
 const Feed = require("../models/feed");
 const User = require("../models/user");
+const { ELASTIC_POST_INDEX } = process.env;
+const SEARCH_POST_PAGE_SIZE = 8;
 const newsfeed = require("../apis/newsfeed");
+const search = require("../apis/search");
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
@@ -35,7 +38,11 @@ const createPost = async (req, res) => {
 
     // carry created_at
     newsfeed.post(
-        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${newPost.id}&created-at=${newPost.created_at}&edge-type=${newPost.shared_post_id ? "share" : "create"}`
+        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${
+            newPost.id
+        }&created-at=${newPost.created_at}&edge-type=${
+            newPost.shared_post_id ? "share" : "create"
+        }`
     );
 
     if (newPost.shared_post_id) {
@@ -142,25 +149,47 @@ const getFeedDetail = async (req, res) => {
     const userId = req.user.id;
     const postId = +req.query["post-id"];
     let feedDetail = await Feed.getFeedDetail(postId, userId);
-    feedDetail.profile_pic_url = User.generatePictureUrl({
-        has_profile: feedDetail.user_profile_pic == 1,
-        id: feedDetail.user_id,
-    });
-    if (feedDetail.shared_post_id) {
-        feedDetail.shared_post_data = await Post.getSharedData(
-            feedDetail.shared_post_id
-        );
-    }
-    feedDetail.latest_comments = feedDetail.latest_comments.map((c) => {
-        return {
-            ...c,
-            profile_pic_url: User.generatePictureUrl({
-                has_profile: c.user_profile_pic == 1,
-                id: c.user_id,
-            }),
-        };
-    });
     res.send({ data: feedDetail });
 };
 
-module.exports = { createPost, editPost, deletePost, getFeedDetail };
+// /post/search?kw=&paging=
+const searchPosts = async (req, res) => {
+    const userId = req.user.id;
+    let { kw, paging } = req.query;
+    paging = isNaN(+paging) ? 0 : +paging;
+    let searchResult = await search.get(`/${ELASTIC_POST_INDEX}/_search`, {
+        data: {
+            from: SEARCH_POST_PAGE_SIZE * paging,
+            size: SEARCH_POST_PAGE_SIZE,
+            query: {
+                function_score: {
+                    query: {
+                        multi_match: {
+                            query: kw,
+                            fields: ["content^2", "username"],
+                            fuzziness: 1,
+                        },
+                    },
+                },
+            },
+        },
+    });
+    searchResult = searchResult.data.hits.hits;
+
+    for (let i = 0; i < searchResult.length; i++) {
+        const result = await Feed.getFeedDetail(
+            searchResult[i]._source.id,
+            userId
+        );
+        searchResult[i] = result;
+    }
+    res.send({ data: searchResult });
+};
+
+module.exports = {
+    createPost,
+    editPost,
+    deletePost,
+    getFeedDetail,
+    searchPosts,
+};
