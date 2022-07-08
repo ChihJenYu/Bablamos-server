@@ -143,6 +143,7 @@ const recalcAffinityTable = async () => {
         }ms`
     );
     const allUsers = Object.keys(userAffinityTable);
+    const bulkWrites = [];
     for (let user of allUsers) {
         user = +user;
         let userAffinityList = [];
@@ -150,18 +151,33 @@ const recalcAffinityTable = async () => {
         for (let otherUser of otherUsers) {
             otherUser = +otherUser;
 
-            await User.findOneAndUpdate(
-                {
-                    user_id: user,
-                    "newsfeed.user_id": otherUser,
-                },
-                {
-                    $set: {
-                        "newsfeed.$.affinity":
-                            userAffinityTable[user][otherUser] || 0,
+            bulkWrites.push({
+                updateOne: {
+                    filter: {
+                        user_id: user,
+                        "newsfeed.user_id": otherUser,
                     },
-                }
-            );
+                    update: {
+                        $set: {
+                            "newsfeed.$.affinity":
+                                userAffinityTable[user][otherUser] || 0,
+                        },
+                    },
+                },
+            });
+
+            // await User.findOneAndUpdate(
+            //     {
+            //         user_id: user,
+            //         "newsfeed.user_id": otherUser,
+            //     },
+            //     {
+            //         $set: {
+            //             "newsfeed.$.affinity":
+            //                 userAffinityTable[user][otherUser] || 0,
+            //         },
+            //     }
+            // );
 
             if (!userAffinityTable[user][otherUser]) {
                 continue;
@@ -171,15 +187,28 @@ const recalcAffinityTable = async () => {
                 affinity: userAffinityTable[user][otherUser],
             });
         }
-        await User.updateOne(
-            { user_id: user },
-            {
-                $set: {
-                    affinity: userAffinityList,
+        bulkWrites.push({
+            updateOne: {
+                filter: {
+                    user_id: user,
                 },
-            }
-        );
+                update: {
+                    $set: {
+                        affinity: userAffinityList,
+                    },
+                },
+            },
+        });
+        // await User.updateOne(
+        //     { user_id: user },
+        //     {
+        //         $set: {
+        //             affinity: userAffinityList,
+        //         },
+        //     }
+        // );
     }
+    await User.bulkWrite(bulkWrites);
     await recalculateEdgeRankScore({ method: "updateMany", cond: {} });
     await sortNewsfeed();
     const completeTime = Date.now();
@@ -397,104 +426,6 @@ const checkPopCount = async ({ post_id, type }) => {
     });
 
     await sortNewsfeed();
-
-    // recalculate score
-    // for (followerId of allFollowerIds) {
-    //     // update these users' newsfeed item like_score, popularity, edge_weight, edge_rank_score and sort
-    //     let updatedUser;
-
-    //     if (type == "like") {
-    //         updatedUser = await User.findOneAndUpdate(
-    //             {
-    //                 user_id: followerId,
-    //                 "newsfeed.post_id": post_id,
-    //             },
-    //             {
-    //                 $set: {
-    //                     "newsfeed.$.like_score": newPopSubScore,
-    //                 },
-    //             },
-    //             { new: true }
-    //         );
-    //     } else if (type == "comment") {
-    //         updatedUser = await User.findOneAndUpdate(
-    //             {
-    //                 user_id: followerId,
-    //                 "newsfeed.post_id": post_id,
-    //             },
-    //             {
-    //                 $set: {
-    //                     "newsfeed.$.comment_score": newPopSubScore,
-    //                 },
-    //             },
-    //             { new: true }
-    //         );
-    //     } else {
-    //         updatedUser = await User.findOneAndUpdate(
-    //             {
-    //                 user_id: followerId,
-    //                 "newsfeed.post_id": post_id,
-    //             },
-    //             {
-    //                 $set: {
-    //                     "newsfeed.$.share_score": newPopSubScore,
-    //                 },
-    //             },
-    //             { new: true }
-    //         );
-    //     }
-
-    //     let matchingNewsfeedEles = updatedUser.newsfeed.filter(
-    //         (el) => el.post_id == post_id
-    //     );
-
-    //     for (let i = 0; i < matchingNewsfeedEles.length; i++) {
-    //         let el = matchingNewsfeedEles[i];
-    //         const popChange =
-    //             calculatePopularity(
-    //                 el.like_score,
-    //                 el.comment_score + el.share_score
-    //             ) - el.popularity;
-    //         el.popularity = calculatePopularity(
-    //             el.like_score,
-    //             el.comment_score + el.share_score
-    //         );
-    //         el.edge_weight = el.edge_weight + POP_WEIGHT * popChange;
-    //         el.edge_rank_score =
-    //             (el.affinity + el.edge_weight) /
-    //             el.time_decay_factor /
-    //             Math.pow(1.25, el.views);
-    //         matchingNewsfeedEles[i] = el;
-    //     }
-    //     await User.updateOne(
-    //         {
-    //             user_id: followerId,
-    //         },
-    //         {
-    //             $pull: {
-    //                 newsfeed: {
-    //                     post_id,
-    //                 },
-    //             },
-    //         }
-    //     );
-    //     await User.updateOne(
-    //         {
-    //             user_id: followerId,
-    //         },
-    //         {
-    //             $push: {
-    //                 newsfeed: {
-    //                     $each: matchingNewsfeedEles,
-    //                     $sort: {
-    //                         edge_rank_score: -1,
-    //                     },
-    //                 },
-    //             },
-    //         }
-    //     );
-    //     console.log("User's newsfeed popularity update complete");
-    // }
 
     const postEndTime = Date.now();
     console.log(
