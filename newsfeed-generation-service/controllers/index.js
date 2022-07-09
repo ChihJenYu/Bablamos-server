@@ -1,6 +1,7 @@
 const Feed = require("../../models/feed");
 const {
     getUserIds,
+    generateUserAffinityTable,
     calculateTimeDecayFactor,
     calculateEdgeWeight,
     calcEdgeRankScore,

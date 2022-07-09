@@ -3,7 +3,6 @@ const {
     generateUserAffinityTable,
     calculateLikeScore,
     calculateCommentScore,
-    calculatePopularity,
     POP_WEIGHT,
     calculateShareScore,
 } = require("../newsfeed-generation-service/models");
@@ -14,6 +13,7 @@ const Post = require("../models/post");
 // type: ["updateOne", "updateMany"]
 // cond: { user_id: 2 }
 // check_popularity: true
+// updateWeight pipeline needs to be fixed
 const recalculateEdgeRankScore = async ({ method, cond, check_popularity }) => {
     const updatePopularity = {
         $addFields: {
@@ -56,6 +56,7 @@ const recalculateEdgeRankScore = async ({ method, cond, check_popularity }) => {
                             "$$n",
                             {
                                 edge_weight: {
+                                    // change this
                                     $sum: [
                                         "$$n.edge_weight",
                                         {
@@ -143,41 +144,72 @@ const recalcAffinityTable = async () => {
         }ms`
     );
     const allUsers = Object.keys(userAffinityTable);
+    // { "1": affinity_list, "2": affinity_list, ... }
+    let batchUserAffinity = {};
     const bulkWrites = [];
-    for (let user of allUsers) {
-        user = +user;
+    for (let i = 0; i < allUsers.length; i++) {
+        user = +allUsers[i];
         let userAffinityList = [];
         const otherUsers = Object.keys(userAffinityTable[user]);
-        for (let otherUser of otherUsers) {
-            otherUser = +otherUser;
 
-            bulkWrites.push({
-                updateOne: {
-                    filter: {
-                        user_id: user,
-                        "newsfeed.user_id": otherUser,
-                    },
-                    update: {
-                        $set: {
-                            "newsfeed.$.affinity":
-                                userAffinityTable[user][otherUser] || 0,
-                        },
+        // get affinity in batches of 10 users
+        if (i % 10 === 0) {
+            batchUserAffinity = {};
+            const userIdRange = [];
+            for (let j = i; j < Math.min(i + 10, allUsers.length); j++) {
+                userIdRange.push(+allUsers[j]);
+            }
+            const batchAffinities = await User.find(
+                {
+                    user_id: {
+                        $in: userIdRange,
                     },
                 },
-            });
+                {
+                    user_id: 1,
+                    affinity: 1,
+                    _id: 0,
+                }
+            );
+            for (let j = 0; j < batchAffinities.length; j++) {
+                batchUserAffinity[batchAffinities[j].user_id] =
+                    batchAffinities[j].affinity;
+            }
+            console.log("Batch fetched");
+        }
 
-            // await User.findOneAndUpdate(
-            //     {
-            //         user_id: user,
-            //         "newsfeed.user_id": otherUser,
-            //     },
-            //     {
-            //         $set: {
-            //             "newsfeed.$.affinity":
-            //                 userAffinityTable[user][otherUser] || 0,
-            //         },
-            //     }
-            // );
+        for (let otherUser of otherUsers) {
+            otherUser = +otherUser;
+            const oldAffinityWithUser = batchUserAffinity[user].find(
+                (el) => el.user_id === otherUser
+            );
+            if (
+                // old affinity is null but new one is not
+                (!oldAffinityWithUser && userAffinityTable[user][otherUser]) ||
+                // old affinity and new affinity differs
+                (oldAffinityWithUser &&
+                    oldAffinityWithUser.affinity !==
+                        userAffinityTable[user][otherUser])
+            ) {
+                bulkWrites.push({
+                    updateOne: {
+                        filter: {
+                            user_id: user,
+                        },
+                        update: {
+                            $set: {
+                                "newsfeed.$[el].affinity":
+                                    userAffinityTable[user][otherUser] || 0,
+                            },
+                        },
+                        arrayFilters: [
+                            {
+                                "el.user_id": otherUser,
+                            },
+                        ],
+                    },
+                });
+            }
 
             if (!userAffinityTable[user][otherUser]) {
                 continue;
@@ -199,15 +231,8 @@ const recalcAffinityTable = async () => {
                 },
             },
         });
-        // await User.updateOne(
-        //     { user_id: user },
-        //     {
-        //         $set: {
-        //             affinity: userAffinityList,
-        //         },
-        //     }
-        // );
     }
+    console.log("bulkWrite job size: ", bulkWrites.length);
     await User.bulkWrite(bulkWrites);
     await recalculateEdgeRankScore({ method: "updateMany", cond: {} });
     await sortNewsfeed();
@@ -215,9 +240,9 @@ const recalcAffinityTable = async () => {
     console.log(
         `Updating user affinity in Mongo took ${
             completeTime - affinityTableCompleteTime
-        }ms for ${Object.keys(userAffinityTable)} users (${
+        }ms for ${Object.keys(userAffinityTable).length} users (${
             (completeTime - affinityTableCompleteTime) /
-            Object.keys(userAffinityTable)
+            Object.keys(userAffinityTable).length
         }ms per user)\n-----------------------------------------`
     );
 };
