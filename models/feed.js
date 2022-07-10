@@ -20,7 +20,6 @@ class Feed extends Post {
         mentioned_users,
         photo_count,
         tags,
-        is_new,
         already_liked,
     }) {
         super({
@@ -41,7 +40,6 @@ class Feed extends Post {
         this.share_count = share_count || 0;
         this.latest_comments = latest_comments || [];
         this.user_profile_pic = user_profile_pic || 0;
-        this.is_new = is_new || false;
         this.already_liked = already_liked == 1 ? 1 : 0;
     }
     // returns array of feed instances posted by a particular user_id

@@ -18,10 +18,6 @@ const UserSchema = mongoose.Schema({
                 type: Number,
                 default: 0,
             },
-            edge_weight: {
-                type: Number,
-                default: 0,
-            },
             like_score: {
                 type: Number,
                 default: 0,
@@ -45,15 +41,11 @@ const UserSchema = mongoose.Schema({
             created_at: {
                 type: Number,
             },
-            edge_rank_score: {
+            views: {
                 type: Number,
                 default: 0,
             },
-            is_new: {
-                type: Boolean,
-                default: false,
-            },
-            views: {
+            edge_rank_score: {
                 type: Number,
                 default: 0,
             },

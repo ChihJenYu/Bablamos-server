@@ -1,12 +1,15 @@
-const { ELASTIC_USER_INDEX, ELASTIC_POST_INDEX } = process.env;
-
 const multer = require("multer");
 
 const multerMiddleware = () => multer().any();
 
-const getValueOr = (table, fl, sl, tl, or) => {
+const getValueOr = (table, keysArray, or) => {
     try {
-        return table[fl][sl][tl] || 0;
+        let value;
+        for (let key of keysArray) {
+            value = table[key];
+            table = table[key];
+        }
+        return value || 0;
     } catch (e) {
         return or;
     }
@@ -14,8 +17,6 @@ const getValueOr = (table, fl, sl, tl, or) => {
 
 const asyncErrorHandler = (fn) => {
     return function (req, res, next) {
-        // Make sure to `.catch()` any errors and pass them along to the `next()`
-        // middleware in the chain, in this case the error handler.
         fn(req, res, next).catch(next);
     };
 };

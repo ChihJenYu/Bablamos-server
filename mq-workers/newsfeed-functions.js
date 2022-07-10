@@ -10,115 +10,100 @@ require("../newsfeed-generation-service/mongoose");
 const User = require("../newsfeed-generation-service/models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
+
+// update pipelines
+const updatePopularity = {
+    $set: {
+        newsfeed: {
+            $map: {
+                input: "$newsfeed",
+                as: "n",
+                in: {
+                    $mergeObjects: [
+                        "$$n",
+                        {
+                            popularity: {
+                                $multiply: [
+                                    {
+                                        $sum: [
+                                            {
+                                                $multiply: [
+                                                    1,
+                                                    "$$n.like_score",
+                                                ],
+                                            },
+                                            {
+                                                $multiply: [
+                                                    2,
+                                                    "$$n.comment_score",
+                                                ],
+                                            },
+                                            {
+                                                $multiply: [
+                                                    3,
+                                                    "$$n.share_score",
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                    POP_WEIGHT,
+                                ],
+                            },
+                        },
+                    ],
+                },
+            },
+        },
+    },
+};
+
+const updateEdgeRankScore = {
+    $set: {
+        newsfeed: {
+            $map: {
+                input: "$newsfeed",
+                as: "n",
+                in: {
+                    $mergeObjects: [
+                        "$$n",
+                        {
+                            test_field: {
+                                $divide: [
+                                    {
+                                        $divide: [
+                                            {
+                                                $sum: [
+                                                    "$$n.affinity",
+                                                    "$$n.popularity",
+                                                ],
+                                            },
+                                            "$$n.time_decay_factor",
+                                        ],
+                                    },
+                                    {
+                                        $pow: [1.25, "$$n.views"],
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            },
+        },
+    },
+};
+
 // type: ["updateOne", "updateMany"]
 // cond: { user_id: 2 }
-// check_popularity: true
-// updateWeight pipeline needs to be fixed
-const recalculateEdgeRankScore = async ({ method, cond, check_popularity }) => {
-    const updatePopularity = {
-        $addFields: {
-            newsfeed: {
-                $map: {
-                    input: "$newsfeed",
-                    as: "n",
-                    in: {
-                        $mergeObjects: [
-                            "$$n",
-                            {
-                                popularity: {
-                                    $sum: [
-                                        {
-                                            $multiply: [1, "$$n.like_score"],
-                                        },
-                                        {
-                                            $multiply: [2, "$$n.comment_score"],
-                                        },
-                                        {
-                                            $multiply: [3, "$$n.share_score"],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-        },
-    };
-    const updateEdgeWeight = {
-        $addFields: {
-            newsfeed: {
-                $map: {
-                    input: "$newsfeed",
-                    as: "n",
-                    in: {
-                        $mergeObjects: [
-                            "$$n",
-                            {
-                                edge_weight: {
-                                    // change this
-                                    $sum: [
-                                        "$$n.edge_weight",
-                                        {
-                                            $multiply: [
-                                                POP_WEIGHT,
-                                                "$$n.popularity",
-                                            ],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-        },
-    };
-    const updateEdgeRankScore = {
-        $addFields: {
-            newsfeed: {
-                $map: {
-                    input: "$newsfeed",
-                    as: "n",
-                    in: {
-                        $mergeObjects: [
-                            "$$n",
-                            {
-                                test_field: {
-                                    $divide: [
-                                        {
-                                            $divide: [
-                                                {
-                                                    $sum: [
-                                                        "$$n.affinity",
-                                                        "$$n.edge_weight",
-                                                    ],
-                                                },
-                                                "$$n.time_decay_factor",
-                                            ],
-                                        },
-                                        {
-                                            $pow: [1.25, "$$n.views"],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-        },
-    };
-    const pipelines = check_popularity
-        ? [updatePopularity, updateEdgeWeight, updateEdgeRankScore]
-        : [updateEdgeRankScore];
-
+// pipelines: [{ $set: ... }, { ... }]
+const recalculateEdgeRankScore = async ({ method, cond, pipelines }) => {
     if (method === "updateOne") {
         await User.updateOne(cond, pipelines);
     } else {
         await User.updateMany(cond, pipelines);
     }
 };
+
 const sortNewsfeed = async () => {
     await User.updateMany({
         $push: {
@@ -149,9 +134,6 @@ const recalcAffinityTable = async () => {
     const bulkWrites = [];
     for (let i = 0; i < allUsers.length; i++) {
         user = +allUsers[i];
-        let userAffinityList = [];
-        const otherUsers = Object.keys(userAffinityTable[user]);
-
         // get affinity in batches of 10 users
         if (i % 10 === 0) {
             batchUserAffinity = {};
@@ -175,9 +157,9 @@ const recalcAffinityTable = async () => {
                 batchUserAffinity[batchAffinities[j].user_id] =
                     batchAffinities[j].affinity;
             }
-            console.log("Batch fetched");
         }
-
+        let userAffinityList = [];
+        const otherUsers = Object.keys(userAffinityTable[user]);
         for (let otherUser of otherUsers) {
             otherUser = +otherUser;
             const oldAffinityWithUser = batchUserAffinity[user].find(
@@ -219,6 +201,17 @@ const recalcAffinityTable = async () => {
                 affinity: userAffinityTable[user][otherUser],
             });
         }
+        let userAffinityWithSelfList = [];
+        for (let otherUser of allUsers) {
+            otherUser = +otherUser;
+            if (!userAffinityTable[otherUser][user]) {
+                continue;
+            }
+            userAffinityWithSelfList.push({
+                user_id: otherUser,
+                affinity_with_self: userAffinityTable[otherUser][user],
+            });
+        }
         bulkWrites.push({
             updateOne: {
                 filter: {
@@ -227,6 +220,7 @@ const recalcAffinityTable = async () => {
                 update: {
                     $set: {
                         affinity: userAffinityList,
+                        affinity_with_self: userAffinityWithSelfList,
                     },
                 },
             },
@@ -234,7 +228,11 @@ const recalcAffinityTable = async () => {
     }
     console.log("bulkWrite job size: ", bulkWrites.length);
     await User.bulkWrite(bulkWrites);
-    await recalculateEdgeRankScore({ method: "updateMany", cond: {} });
+    await recalculateEdgeRankScore({
+        method: "updateMany",
+        cond: {},
+        pipelines: [updateEdgeRankScore],
+    });
     await sortNewsfeed();
     const completeTime = Date.now();
     console.log(
@@ -348,7 +346,11 @@ const recalcTimeDecayFactor = async ({ type }) => {
             }
         );
     }
-    await recalculateEdgeRankScore({ method: "updateMany", cond: {} });
+    await recalculateEdgeRankScore({
+        method: "updateMany",
+        cond: {},
+        pipelines: [updateEdgeRankScore],
+    });
     await sortNewsfeed();
     console.log(
         `Total time elapsed: ${
@@ -447,7 +449,7 @@ const checkPopCount = async ({ post_id, type }) => {
                 $in: allFollowerIds,
             },
         },
-        check_popularity: true,
+        pipelines: [updatePopularity, updateEdgeRankScore],
     });
 
     await sortNewsfeed();

@@ -8,7 +8,6 @@ const LIKE_WEIGHT = 1;
 
 // EDGE WEIGHT
 const POP_WEIGHT = 2;
-const EDGE_TYPE_WEIGHT = 1;
 const ENV = "dev"; // in dev query from friendship instead of followship
 
 // getUserIds({type: "all"})
@@ -46,15 +45,18 @@ const getUserIds = async (arg) => {
 
 // table of how many times each user id has liked my post
 // type: eventful_edge, comment
+// { 1: { 2: { eventful_edge: 12, comment: 3 } } };
 const generateUserLikesTable = async () => {
     const userLikesTable = {};
     const [userLikes] = await db.pool.query(
-        `select p.user_id as author_id, lu.user_id, 'eventful_edge' as type
-        from post p join like_user lu on p.id = lu.post_id
+        `select @rownum := @rownum + 1 as inc_id, p.user_id as author_id, lu.user_id, 'eventful_edge' as type
+        from post p join like_user lu on p.id = lu.post_id 
+        cross join (select @rownum := 0) r
         where p.user_id != lu.user_id
         union
-        select c.user_id as author_id, lu.user_id, 'comment' as type
+        select @rownum := @rownum + 1 as inc_id, c.user_id as author_id, lu.user_id, 'comment' as type
         from comment c join like_user lu on c.id = lu.comment_id
+        cross join (select @rownum := 0) r
         where c.user_id != lu.user_id
         `
     );
@@ -92,8 +94,8 @@ const generateUserLikesTable = async () => {
     return userLikesTable;
 };
 
-// table of how many times each user id has commented on my post or comment
-// level: 1, 2
+// table of how many times each user id has commented on my post
+// { 1: { 2: 12, 3: 1 } };
 const generateUserCommentsTable = async () => {
     const userCommentsTable = {};
     const [userComments] = await db.pool.query(
@@ -102,12 +104,6 @@ const generateUserCommentsTable = async () => {
         join post p on c.post_id = p.id
         join user u on p.user_id = u.id
         where p.user_id != c.user_id
-        UNION
-        select c_second_level.id, c.user_id as commentee_id, c_second_level.user_id as commentor_id, 2 as level
-        from comment c
-        join comment c_second_level
-        on c.id = c_second_level.replied_comment_id
-        where c.user_id != c_second_level.user_id
         `
     );
     for (let commenteeCommentors of userComments) {
@@ -115,10 +111,7 @@ const generateUserCommentsTable = async () => {
             userCommentsTable[commenteeCommentors.commentee_id] = {};
             userCommentsTable[commenteeCommentors.commentee_id][
                 commenteeCommentors.commentor_id
-            ] = {};
-            userCommentsTable[commenteeCommentors.commentee_id][
-                commenteeCommentors.commentor_id
-            ][commenteeCommentors.level] = 1;
+            ] = 1;
         } else {
             if (
                 !userCommentsTable[commenteeCommentors.commentee_id][
@@ -127,40 +120,23 @@ const generateUserCommentsTable = async () => {
             ) {
                 userCommentsTable[commenteeCommentors.commentee_id][
                     commenteeCommentors.commentor_id
-                ] = {};
+                ] = 1;
+            } else {
                 userCommentsTable[commenteeCommentors.commentee_id][
                     commenteeCommentors.commentor_id
-                ][commenteeCommentors.level] = 1;
-            } else {
-                if (
-                    !userCommentsTable[commenteeCommentors.commentee_id][
-                        commenteeCommentors.commentor_id
-                    ][commenteeCommentors.level]
-                ) {
-                    userCommentsTable[commenteeCommentors.commentee_id][
-                        commenteeCommentors.commentor_id
-                    ][commenteeCommentors.level] = 1;
-                } else {
-                    userCommentsTable[commenteeCommentors.commentee_id][
-                        commenteeCommentors.commentor_id
-                    ][commenteeCommentors.level]++;
-                }
+                ]++;
             }
         }
     }
     return userCommentsTable;
 };
 
-// table of how many times each user id has mentioned me on posts or comments
-// type: eventful_edge, comment
+// table of how many times each user id has mentioned me in comments
+// { 1: { 2: 12, 3: 1 } };
 const generateUserMentionsTable = async () => {
     const userMentionsTable = {};
     const [userMentions] = await db.pool.query(
-        `select p.user_id as author_id, mu.user_id as mentioned_user, 'eventful_edge' as type
-        from post p join mention_user mu on p.id = mu.post_id
-        where p.user_id != mu.user_id
-        union
-        select c.user_id as author_id, mu.user_id as mentioned_user, 'comment' as type
+        `select c.user_id as author_id, mu.user_id as mentioned_user
         from comment c join mention_user mu on c.id = mu.comment_id
         where c.user_id != mu.user_id
         `
@@ -170,10 +146,7 @@ const generateUserMentionsTable = async () => {
             userMentionsTable[authorMentionedUser.mentioned_user] = {};
             userMentionsTable[authorMentionedUser.mentioned_user][
                 authorMentionedUser.author_id
-            ] = {};
-            userMentionsTable[authorMentionedUser.mentioned_user][
-                authorMentionedUser.author_id
-            ][authorMentionedUser.type] = 1;
+            ] = 1;
         } else {
             if (
                 !userMentionsTable[authorMentionedUser.mentioned_user][
@@ -182,24 +155,11 @@ const generateUserMentionsTable = async () => {
             ) {
                 userMentionsTable[authorMentionedUser.mentioned_user][
                     authorMentionedUser.author_id
-                ] = {};
+                ] = 1;
+            } else {
                 userMentionsTable[authorMentionedUser.mentioned_user][
                     authorMentionedUser.author_id
-                ][authorMentionedUser.type] = 1;
-            } else {
-                if (
-                    !userMentionsTable[authorMentionedUser.mentioned_user][
-                        authorMentionedUser.author_id
-                    ][authorMentionedUser.type]
-                ) {
-                    userMentionsTable[authorMentionedUser.mentioned_user][
-                        authorMentionedUser.author_id
-                    ][authorMentionedUser.type] = 1;
-                } else {
-                    userMentionsTable[authorMentionedUser.mentioned_user][
-                        authorMentionedUser.author_id
-                    ][authorMentionedUser.type]++;
-                }
+                ]++;
             }
         }
     }
@@ -223,106 +183,63 @@ const generateUserAffinityTable = async () => {
                 continue;
             }
             // calculate comment score
-            const outgoingFirstLevel = getValueOr(
+            const outgoingComments = getValueOr(
                 userCommentsTable,
-                otherUserId,
-                userId,
-                "1",
+                [otherUserId, userId],
                 0
             );
 
-            const incomingFirstLevel = getValueOr(
+            const incomingComments = getValueOr(
                 userCommentsTable,
-                userId,
-                otherUserId,
-                "1",
+                [userId, otherUserId],
                 0
             );
 
-            const outgoingSecondLevel = getValueOr(
-                userCommentsTable,
-                otherUserId,
-                userId,
-                "2",
-                0
-            );
-            const incomingSecondLevel = getValueOr(
-                userCommentsTable,
-                userId,
-                otherUserId,
-                "2",
-                0
-            );
-
-            const commentScore =
-                4 * outgoingFirstLevel +
-                3 * outgoingSecondLevel +
-                2 * incomingFirstLevel +
-                incomingSecondLevel;
+            const commentScore = 2 * outgoingComments + incomingComments;
 
             // calculate mention score
-            const outgoingMentionsOnEventfulEdge = getValueOr(
+            const outgoingMentions = getValueOr(
                 userMentionsTable,
-                otherUserId,
-                userId,
-                "eventful_edge",
+                [otherUserId, userId],
                 0
             );
-            const incomingMentionsOnEventfulEdge = getValueOr(
+            const incomingMentions = getValueOr(
                 userMentionsTable,
-                userId,
-                otherUserId,
-                "eventful_edge",
-                0
-            );
-            const outgoingMentionsOnNonEventfulEdge = getValueOr(
-                userMentionsTable,
-                otherUserId,
-                userId,
-                "comment",
-                0
-            );
-            const incomingMentionsOnNonEventfulEdge = getValueOr(
-                userMentionsTable,
-                userId,
-                otherUserId,
-                "comment",
+                [userId, otherUserId],
                 0
             );
             const mentionScore =
-                4 * outgoingMentionsOnEventfulEdge +
-                3 * outgoingMentionsOnNonEventfulEdge +
-                2 * incomingMentionsOnEventfulEdge +
-                incomingMentionsOnNonEventfulEdge;
+                2 * outgoingMentions +
+                incomingMentions;
 
             // calculate like score
             const outgoingLikesOnEventfulEdge = getValueOr(
                 userLikesTable,
-                otherUserId,
+                [otherUserId,
                 userId,
-                "eventful_edge",
+                "eventful_edge"],
                 0
             );
 
             const incomingLikesOnEventfulEdge = getValueOr(
                 userLikesTable,
-                userId,
+                [userId,
                 otherUserId,
-                "eventful_edge",
+                "eventful_edge"],
                 0
             );
             const outgoingLikesOnNonEventfulEdge = getValueOr(
                 userLikesTable,
-                otherUserId,
+                [otherUserId,
                 userId,
-                "comment",
+                "comment"],
                 0
             );
             const incomingLikesOnNonEventfulEdge = getValueOr(
                 userLikesTable,
-                userId,
+                [userId,
                 otherUserId,
-                "comment",
+                "comment"],
                 0
             );
             const likeScore =
@@ -343,19 +260,6 @@ const generateUserAffinityTable = async () => {
     return userAffinityTable;
 };
 
-const calcAvgWeightOnEventfulEdge = async (my_user_id, post_id) => {
-    const [averageWeightOnEventfulEdge] = await db.pool.query(
-        `select avg(parent.weight) as avg_weight from (
-                    select pt.tag_id, utw.weight from post_tag pt
-                    join user_tag_weight utw on pt.tag_id = utw.tag_id
-                    where utw.user_id = ? and pt.post_id = ?) parent
-                    `,
-        [my_user_id, post_id]
-    );
-    const averageWeight = +averageWeightOnEventfulEdge[0].avg_weight;
-    return averageWeight;
-};
-
 const calculateLikeScore = (lc) => lc;
 
 const calculateCommentScore = (cc) => 2 * cc;
@@ -363,20 +267,6 @@ const calculateCommentScore = (cc) => 2 * cc;
 const calculateShareScore = (sc) => 3 * sc;
 
 const calculatePopularity = (ls, cs, ss) => POP_WEIGHT * (ls + cs + ss);
-
-const calculateEdgeWeight = async (feed, my_user_id) => {
-    // EDGE WEIGHT
-    // edge type
-    const edgeTypeScore = feed.shared_post_id ? 3 : 4;
-
-    return (
-        EDGE_TYPE_WEIGHT * edgeTypeScore +
-        POP_WEIGHT *
-            (calculateLikeScore(feed.like_count) +
-                calculateCommentScore(feed.comment_count) +
-                calculateShareScore(feed.share_count))
-    );
-};
 
 const calculateTimeDecayFactor = (feed) => {
     const feedCreatedAtUnix = feed.created_at;
@@ -400,18 +290,8 @@ const calculateAlreadySeenFactor = (views) => {
     return Math.pow(1.25, views);
 };
 
-const calcEdgeRankScore = (af, ew, td, v) =>
-    (af + ew) / td / calculateAlreadySeenFactor(v);
-
-// const calcEdgeRankScore = async ({ affinity, feed, my_user_id, views }) => {
-//     const affinityUsed =
-//         affinity ||
-//         (await calculateIndividualAffinity(my_user_id, feed.userid));
-//     let edgeWeight = await calculateEdgeWeight(feed, my_user_id, feed.id);
-//     let timeDecayFactor = calculateTimeDecayFactor(feed);
-//     let alreadySeenFactor = calculateAlreadySeenFactor(views);
-//     return (affinityUsed + edgeWeight) / timeDecayFactor / alreadySeenFactor;
-// };
+const calcEdgeRankScore = (af, pop, td, v) =>
+    (af + pop) / td / calculateAlreadySeenFactor(v);
 
 module.exports = {
     getUserIds,
@@ -420,7 +300,6 @@ module.exports = {
     calculateCommentScore,
     calculateShareScore,
     calculatePopularity,
-    calculateEdgeWeight,
     calculateTimeDecayFactor,
     calcEdgeRankScore,
     POP_WEIGHT,

@@ -1,7 +1,6 @@
 const Feed = require("../../models/feed");
 const {
     getUserIds,
-    generateUserAffinityTable,
     calculateTimeDecayFactor,
     calculateEdgeWeight,
     calcEdgeRankScore,
@@ -25,10 +24,11 @@ const getNewsfeed = async (req, res) => {
         return;
     }
     const newsfeed = user.newsfeed.map((nf) => {
-        return { post_id: nf.post_id, is_new: nf.is_new };
+        return { post_id: nf.post_id };
     });
     res.send({ data: newsfeed });
 };
+const redisClient = require("../redis/");
 
 const updateNewsfeed = async (req, res) => {
     const method = req.query.method;
@@ -49,15 +49,30 @@ const updateNewsfeed = async (req, res) => {
         // push fresh feed to followers
         if (httpMethod === "POST") {
             const timestampStart = Date.now();
-            const posterObj = await User.findOne(
-                { user_id: userId },
-                { affinity_with_self: 1 }
-            );
-            const affinityWithSelf = {};
-            posterObj.affinity_with_self.forEach((user) => {
-                affinityWithSelf[user.user_id] = user.affinity_with_self;
-            });
 
+            let affinityWithSelf = {};
+            // get affinity_with_self from redis
+            const affinityWithSelfJSON = await redisClient.get(
+                `affinity_with_self_user_${userId}`
+            );
+            if (affinityWithSelfJSON) {
+                affinityWithSelf = JSON.parse(affinityWithSelfJSON);
+            } else {
+                // if not exist, get from mongo
+                const posterObj = await User.findOne(
+                    { user_id: userId },
+                    { affinity_with_self: 1 }
+                );
+
+                posterObj.affinity_with_self.forEach((user) => {
+                    affinityWithSelf[user.user_id] = user.affinity_with_self;
+                });
+                // write affinity_with_self to redis
+                redisClient.set(
+                    `affinity_with_self_user_${userId}`,
+                    JSON.stringify(affinityWithSelf)
+                );
+            }
             const bulkWrites = [];
             for (let followerId of followerIds) {
                 bulkWrites.push({
@@ -73,22 +88,18 @@ const updateNewsfeed = async (req, res) => {
                                             post_id: postId,
                                             user_id: userId,
                                             affinity:
-                                                affinityWithSelf[followerId],
-                                            edge_weight:
-                                                edgeType === "share" ? 3 : 4,
+                                                affinityWithSelf[followerId] ||
+                                                0,
                                             like_score: 0,
                                             comment_score: 0,
                                             share_score: 0,
                                             popularity: 0,
                                             time_decay_factor: 0.01,
                                             created_at: createdAt,
-                                            edge_rank_score:
-                                                (affinityWithSelf[followerId] +
-                                                    edgeType ===
-                                                "share"
-                                                    ? 3
-                                                    : 4) / 0.01,
                                             views: 0,
+                                            edge_rank_score:
+                                                affinityWithSelf[followerId] ||
+                                                0 / 0.01,
                                         },
                                     ],
                                     $sort: {

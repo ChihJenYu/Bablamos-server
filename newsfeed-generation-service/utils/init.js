@@ -4,7 +4,6 @@ const {
     calculateCommentScore,
     calculateShareScore,
     calculatePopularity,
-    calculateEdgeWeight,
     calculateTimeDecayFactor,
     calcEdgeRankScore,
 } = require("../models");
@@ -41,7 +40,6 @@ const initialization = async () => {
             feedToInsert.user_id = feed.user_id;
             feedToInsert.affinity =
                 userAffinityTable[userId][feed.user_id] || 0;
-            feedToInsert.edge_weight = await calculateEdgeWeight(feed, userId);
             feedToInsert.like_score = calculateLikeScore(feed.like_count);
             feedToInsert.comment_score = calculateCommentScore(
                 feed.comment_count
@@ -57,7 +55,7 @@ const initialization = async () => {
             feedToInsert.views = 0;
             feedToInsert.edge_rank_score = calcEdgeRankScore(
                 feedToInsert.affinity,
-                feedToInsert.edge_weight,
+                feedToInsert.popularity,
                 feedToInsert.time_decay_factor,
                 feedToInsert.views
             );
@@ -132,16 +130,16 @@ const initialization = async () => {
             }ms`
         );
 
-        const redisInsertBeginTime = Date.now();
-        for (let otherUser of affinityWithSelfList) {
-            await redisClient.HSET(`affinity_with_self_user_${userId}`, "" + otherUser.user_id, "" + otherUser.affinity_with_self)
-        }
-        const redisInsertCompleteTime = Date.now();
-        console.log(
-            `Inserting user's affinity_with_self dictionary into redis took ${
-                redisInsertCompleteTime - redisInsertBeginTime
-            }ms`
-        );
+        // const redisInsertBeginTime = Date.now();
+        // for (let otherUser of affinityWithSelfList) {
+        //     await redisClient.HSET(`affinity_with_self_user_${userId}`, "" + otherUser.user_id, "" + otherUser.affinity_with_self)
+        // }
+        // const redisInsertCompleteTime = Date.now();
+        // console.log(
+        //     `Inserting user's affinity_with_self dictionary into redis took ${
+        //         redisInsertCompleteTime - redisInsertBeginTime
+        //     }ms`
+        // );
 
         console.log(
             `Total time elapsed: ${
