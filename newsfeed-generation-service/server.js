@@ -8,7 +8,7 @@ server.listen(NFGS_PORT, async () => {
     console.log(`Listening on port: ${NFGS_PORT}`);
 
     // highest priority
-    const recalcAffinity = schedule.scheduleJob("* * * * * *", () => {
+    const recalcAffinity = schedule.scheduleJob("* */12 * * *", () => {
         updaterJobQueue.add(
             { function: "recalcAffinityTable" },
             { priority: 1 }

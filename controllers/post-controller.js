@@ -168,6 +168,7 @@ const searchPosts = async (req, res) => {
                             query: kw,
                             fields: ["content^2", "username"],
                             fuzziness: 1,
+                            minimum_should_match: "3<-20%",
                         },
                     },
                 },
@@ -175,15 +176,17 @@ const searchPosts = async (req, res) => {
         },
     });
     searchResult = searchResult.data.hits.hits;
-
+    let resultsToReturn = [];
     for (let i = 0; i < searchResult.length; i++) {
         const result = await Feed.getFeedDetail(
             searchResult[i]._source.id,
             userId
         );
-        searchResult[i] = result;
+        if (result) {
+            resultsToReturn.push(result);
+        }
     }
-    res.send({ data: searchResult });
+    res.send({ data: resultsToReturn });
 };
 
 module.exports = {

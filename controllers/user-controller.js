@@ -12,7 +12,7 @@ const newsfeed = require("../apis/newsfeed");
 const aws = require("aws-sdk");
 const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
-const SEARCH_USER_PAGE_SIZE = 8;
+const SEARCH_USER_PAGE_SIZE = 6;
 let userTempNewsfeedStorage = {};
 
 // type = "native"
@@ -436,22 +436,33 @@ const getUserFriends = async (req, res) => {
     res.send({ data: friends });
 };
 
-// /user/search?kw=&paging=
+// /user/search?type=&kw=&paging=
+// type: ["simple", "detail"]
 const searchUsers = async (req, res) => {
-    let { kw, paging } = req.query;
+    let { type, kw, paging } = req.query;
     paging = isNaN(+paging) ? 0 : +paging;
+    const searchCriteria =
+        type === "simple"
+            ? {
+                  match_phrase_prefix: {
+                      username: {
+                          query: kw,
+                      },
+                  },
+              }
+            : {
+                  match: {
+                      username: {
+                          query: kw,
+                          fuzziness: 1,
+                      },
+                  },
+              };
     let searchResult = await search.get(`/${ELASTIC_USER_INDEX}/_search`, {
         data: {
             from: SEARCH_USER_PAGE_SIZE * paging,
             size: SEARCH_USER_PAGE_SIZE,
-            query: {
-                match: {
-                    username: {
-                        query: kw,
-                        fuzziness: 1,
-                    },
-                },
-            },
+            query: searchCriteria,
         },
     });
     searchResult = searchResult.data.hits.hits.map((res) => ({
