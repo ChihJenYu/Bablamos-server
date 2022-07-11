@@ -67,7 +67,7 @@ const updateEdgeRankScore = {
                     $mergeObjects: [
                         "$$n",
                         {
-                            test_field: {
+                            edge_rank_score: {
                                 $divide: [
                                     {
                                         $divide: [

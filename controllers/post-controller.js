@@ -143,6 +143,14 @@ const deletePost = async (req, res) => {
         post_id: deletedPost.id,
         user_id: deletedPost.user_id,
     });
+
+    // delete post from elastic search
+    console.log("Calling elastic server...");
+    try {
+        search.delete(`/${ELASTIC_POST_INDEX}/_doc/${deletedPost.id}`);
+    } catch (e) {
+        console.log(e);
+    }
 };
 
 const getFeedDetail = async (req, res) => {

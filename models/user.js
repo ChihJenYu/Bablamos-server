@@ -309,7 +309,7 @@ class User {
             return {
                 ...friend,
                 profile_pic_url: User.generatePictureUrl({
-                    has_cover: friend.user_profile_pic == 1,
+                    has_profile: friend.user_profile_pic == 1,
                     id: friend.id,
                 }),
             };
