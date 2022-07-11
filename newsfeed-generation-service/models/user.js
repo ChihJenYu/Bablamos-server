@@ -49,6 +49,10 @@ const UserSchema = mongoose.Schema({
                 type: Number,
                 default: 0,
             },
+            is_new: {
+                type: Boolean,
+                default: false,
+            },
         },
     ],
     affinity: [

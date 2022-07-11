@@ -35,7 +35,6 @@ const updateNewsfeed = async (req, res) => {
     const userId = +req.query["user-id"];
     const postId = +req.query["post-id"];
     const createdAt = req.query["created-at"];
-    const edgeType = req.query["edge-type"];
     const httpMethod = req.method;
 
     if (method === "write") {
@@ -64,14 +63,17 @@ const updateNewsfeed = async (req, res) => {
                     { affinity_with_self: 1 }
                 );
 
-                posterObj.affinity_with_self.forEach((user) => {
-                    affinityWithSelf[user.user_id] = user.affinity_with_self;
-                });
-                // write affinity_with_self to redis
-                redisClient.set(
-                    `affinity_with_self_user_${userId}`,
-                    JSON.stringify(affinityWithSelf)
-                );
+                if (posterObj.length > 0) {
+                    posterObj.affinity_with_self.forEach((user) => {
+                        affinityWithSelf[user.user_id] =
+                            user.affinity_with_self;
+                    });
+                    // write affinity_with_self to redis
+                    redisClient.set(
+                        `affinity_with_self_user_${userId}`,
+                        JSON.stringify(affinityWithSelf)
+                    );
+                }
             }
             const bulkWrites = [];
             for (let followerId of followerIds) {
@@ -93,13 +95,15 @@ const updateNewsfeed = async (req, res) => {
                                             like_score: 0,
                                             comment_score: 0,
                                             share_score: 0,
-                                            popularity: 0,
+                                            // popularity buff for new posts
+                                            popularity: 10,
                                             time_decay_factor: 0.01,
                                             created_at: createdAt,
                                             views: 0,
                                             edge_rank_score:
-                                                affinityWithSelf[followerId] ||
-                                                0 / 0.01,
+                                                (affinityWithSelf[followerId] ||
+                                                    0 + 10) / 0.01,
+                                            is_new: true,
                                         },
                                     ],
                                     $sort: {
@@ -313,6 +317,9 @@ const recalcNewsfeed = async (req, res) => {
                     },
                     $mul: {
                         "newsfeed.$.edge_rank_score": 0.8,
+                    },
+                    $set: {
+                        "newsfeed.$.is_new": false,
                     },
                 }
             );
