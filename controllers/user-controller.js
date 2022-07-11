@@ -124,7 +124,13 @@ const userSignIn = async (req, res) => {
 };
 
 const editUserProfile = async (req, res) => {
-    const userId = req.user.id;
+    const {
+        id: userId,
+        username,
+        email,
+        profile_pic_url,
+        allow_stranger_follow,
+    } = req.user.id;
     if (req.body.allow_stranger_follow || req.body.info) {
         const user = new User({ id: userId });
         await user.save(req.body);
@@ -165,11 +171,19 @@ const editUserProfile = async (req, res) => {
         const user = new User({ id: userId });
         let updateArgs = {};
         let responseBody = {};
+        // change user's jwt token for updated profile_pic_url
         if (profilePicChanged) {
             updateArgs.user_profile_pic = 1;
             responseBody.profile_pic_url = User.generatePictureUrl({
                 has_profile: true,
                 id: userId,
+            });
+            responseBody.access_token = User.staticGenerateAuthToken({
+                id: userId,
+                username,
+                email,
+                user_profile_pic: 1,
+                allow_stranger_follow,
             });
         }
         if (coverPicChanged) {
@@ -179,9 +193,6 @@ const editUserProfile = async (req, res) => {
                 id: userId,
             });
         }
-
-        console.log(responseBody);
-
         await user.save(updateArgs);
         res.send({
             data: responseBody,
