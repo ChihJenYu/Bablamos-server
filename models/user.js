@@ -183,7 +183,7 @@ class User {
 
         const hashedPassword = await bcrypt.hash(this.password, SALT_ROUNDS);
         this.password = hashedPassword;
-        const query = `INSERT INTO user (username, email, password, user_profile_pic, user_cover_pic, allow_stranger_follow, info) VALUES (?, ?, ?, ?, ?, ?)`;
+        const query = `INSERT INTO user (username, email, password, user_profile_pic, user_cover_pic, allow_stranger_follow, info) VALUES (?, ?, ?, ?, ?, ?, ?)`;
         const [{ insertId: user_id }] = await db.pool.query(query, [
             this.username,
             this.email,
