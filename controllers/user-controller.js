@@ -130,7 +130,7 @@ const editUserProfile = async (req, res) => {
         email,
         profile_pic_url,
         allow_stranger_follow,
-    } = req.user.id;
+    } = req.user;
     if (req.body.allow_stranger_follow || req.body.info) {
         const user = new User({ id: userId });
         await user.save(req.body);
