@@ -63,7 +63,7 @@ const updateNewsfeed = async (req, res) => {
                     { affinity_with_self: 1 }
                 );
 
-                if (posterObj.length > 0) {
+                if (posterObj) {
                     posterObj.affinity_with_self.forEach((user) => {
                         affinityWithSelf[user.user_id] =
                             user.affinity_with_self;
