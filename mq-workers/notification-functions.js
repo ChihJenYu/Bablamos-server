@@ -52,43 +52,47 @@ const pushNotification = async (args) => {
                 allOfflineFollowers.push(follower.id);
             }
         }
-
-        const firstNotificationId = await Notification.bulkSave({
-            type_id: 1,
-            for_user_ids: allOnlineFollowers,
-            inv_post_id: post_id,
-            inv_user_id: user_id,
-        });
-
-        if (firstNotificationId) {
-            allOnlineFollowers = allOnlineFollowers.map((el, index) => {
-                return {
-                    id: el,
-                    notification_id: index + firstNotificationId,
-                };
+        if (allOnlineFollowers.length > 0) {
+            const firstNotificationId = await Notification.bulkSave({
+                type_id: 1,
+                for_user_ids: allOnlineFollowers,
+                inv_post_id: post_id,
+                inv_user_id: user_id,
             });
 
-            allOnlineFollowers.forEach((el) => {
-                socket.emit("notification_event", {
-                    notification_type_id: args.type,
-                    username,
-                    inv_user_id: user_id,
-                    profile_pic_url,
-                    inv_post_id: post_id,
-                    for_user_id: el.id,
-                    id: el.notification_id,
-                    created_at: Date.now() / 1000,
+            if (firstNotificationId) {
+                allOnlineFollowers = allOnlineFollowers.map((el, index) => {
+                    return {
+                        id: el,
+                        notification_id: index + firstNotificationId,
+                    };
                 });
-            });
+
+                allOnlineFollowers.forEach((el) => {
+                    socket.emit("notification_event", {
+                        notification_type_id: args.type,
+                        username,
+                        inv_user_id: user_id,
+                        profile_pic_url,
+                        inv_post_id: post_id,
+                        for_user_id: el.id,
+                        id: el.notification_id,
+                        created_at: Date.now() / 1000,
+                    });
+                });
+            }
         }
 
         // let allFollowerIds = allFollowers.map((id) => id.id);
-        await Notification.bulkSave({
-            type_id: 1,
-            for_user_ids: allOfflineFollowers,
-            inv_post_id: post_id,
-            inv_user_id: user_id,
-        });
+        if (allOfflineFollowers.length > 0) {
+            await Notification.bulkSave({
+                type_id: 1,
+                for_user_ids: allOfflineFollowers,
+                inv_post_id: post_id,
+                inv_user_id: user_id,
+            });
+        }
+
         return;
     }
     if (args.type == 2) {

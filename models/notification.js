@@ -66,7 +66,6 @@ class Notification {
                 for_user_id,
                 type_id,
             ]);
-
             // insert into notification parent table
             const [{ insertId: notification_id }] = await conn.query(
                 `INSERT INTO notification (for_user_id, notification_type_id) VALUES ?
