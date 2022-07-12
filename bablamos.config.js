@@ -24,5 +24,17 @@ module.exports = {
             name: "notification-service",
             script: "./mq-workers/notification-service.js",
         },
+        {
+            name: "user-simulator",
+            script: "./simulation/user.js",
+        },
+        {
+            name: "post-simulator",
+            script: "./simulation/post.js",
+        },
+        {
+            name: "comment-simulator",
+            script: "./simulation/comment.js",
+        },
     ],
 };
