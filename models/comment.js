@@ -37,6 +37,13 @@ class Comment extends Edge {
         return photoUrls;
     }
 
+    static async getRandomComment() {
+        const [randomComment] = await db.pool.query(
+            "SELECT * FROM comment ORDER BY RAND() LIMIT 1"
+        );
+        return randomComment[0];
+    }
+
     static async delete(id) {
         const conn = await db.pool.getConnection();
         try {

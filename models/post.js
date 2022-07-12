@@ -30,12 +30,11 @@ class Post extends Edge {
         this.tags = tags || [];
     }
 
-    generatePhotoUrls() {
-        let photoUrls = [];
-        for (let i = 0; i < this.photo_count; i++) {
-            photoUrls.push(`/user-media/${this.id}/${i}.jpg`);
-        }
-        return photoUrls;
+    static async getRandomPost() {
+        const [randomPost] = await db.pool.query(
+            "SELECT * FROM post ORDER BY RAND() LIMIT 1"
+        );
+        return randomPost[0];
     }
 
     static staticGeneratePhotoUrls(id, photo_count) {

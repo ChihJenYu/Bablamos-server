@@ -31,6 +31,13 @@ class User {
         this.info = info || null;
     }
 
+    static async getRandomUser(count) {
+        const [randomUser] = await db.pool.query(
+            `SELECT * FROM user ORDER BY RAND() LIMIT ${count || 1}`
+        );
+        return count ? randomUser : randomUser[0];
+    }
+
     static generatePictureUrl({ has_profile, id }) {
         return has_profile
             ? CLOUDFRONT_DOMAIN_NAME + `/user/${id}/profile.jpg`
