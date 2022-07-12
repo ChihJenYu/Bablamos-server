@@ -178,7 +178,7 @@ const editUserProfile = async (req, res) => {
                 email,
                 user_profile_pic: 1,
                 allow_stranger_follow,
-            });
+            }).token;
         }
         if (coverPicChanged) {
             updateArgs.user_cover_pic = 1;
