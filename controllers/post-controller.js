@@ -36,7 +36,6 @@ const createPost = async (req, res) => {
     );
     const UPDATE_METHOD = "write";
 
-    // carry created_at
     newsfeed.post(
         `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${
             newPost.id
@@ -100,16 +99,6 @@ const editPost = async (req, res) => {
     await newPost.save();
 
     res.status(200).send({ id: newPost.id });
-
-    // console.log(
-    //     "Post updated in database; Calling newsfeed generation service..."
-    // );
-
-    // locate edge in each follower's feed list and replace with the updated edge
-    // const UPDATE_METHOD = "write";
-    // newsfeed.patch(
-    //     `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${+post_id}`
-    // );
 };
 
 const deletePost = async (req, res) => {

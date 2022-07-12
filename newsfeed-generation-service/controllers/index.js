@@ -7,6 +7,28 @@ const {
 } = require("../models");
 const User = require("../models/user");
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
+const redisClient = require("../redis/");
+
+const createUser = async (req, res) => {
+    const userId = req.query["user-id"];
+    const timestampStart = Date.now();
+    try {
+        await User.insertOne({
+            user_id: userId,
+            newsfeed: [],
+            affinity: [],
+            affinity_with_self: [],
+        });
+        console.log(
+            `Insertion of user #${userId} complete; took ${
+                Date.now() - timestampStart
+            }ms`
+        );
+    } catch (e) {
+        console.log(e);
+    }
+};
+
 const getNewsfeed = async (req, res) => {
     const userId = +req.query["user-id"];
     const from = +req.query.from;
@@ -28,7 +50,6 @@ const getNewsfeed = async (req, res) => {
     });
     res.send({ data: newsfeed });
 };
-const redisClient = require("../redis/");
 
 const updateNewsfeed = async (req, res) => {
     const method = req.query.method;
@@ -349,4 +370,4 @@ const recalcNewsfeed = async (req, res) => {
     }
 };
 
-module.exports = { getNewsfeed, updateNewsfeed, recalcNewsfeed };
+module.exports = { createUser, getNewsfeed, updateNewsfeed, recalcNewsfeed };

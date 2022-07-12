@@ -3,6 +3,7 @@ const redisClient = require("../redis");
 const db = require("../mysql");
 const { asyncErrorHandler } = require("../../utils/util");
 const {
+    createUser,
     getNewsfeed,
     updateNewsfeed,
     recalcNewsfeed,
@@ -17,5 +18,7 @@ router
     .delete(asyncErrorHandler(updateNewsfeed));
 
 router.route("/newsfeed/update/recalc").post(asyncErrorHandler(recalcNewsfeed));
+
+router.route("/newsfeed/user").post(asyncErrorHandler(createUser));
 
 module.exports = router;

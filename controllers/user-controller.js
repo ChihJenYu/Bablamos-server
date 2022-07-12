@@ -92,6 +92,7 @@ const userSignUp = async (req, res) => {
                 id: newUserId,
             });
             res.status(201).send(responseBody);
+            newsfeed.post(`/user?user-id=${responseBody.user.id}`);
         } else {
             // no profile picture
             const responseBody = await insertNewUser(false, "native", req.body);
@@ -99,6 +100,7 @@ const userSignUp = async (req, res) => {
                 has_profile: false,
             });
             res.status(201).send(responseBody);
+            newsfeed.post(`/user?user-id=${responseBody.user.id}`);
         }
     } catch (e) {
         console.log(e);
