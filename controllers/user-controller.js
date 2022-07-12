@@ -124,13 +124,7 @@ const userSignIn = async (req, res) => {
 };
 
 const editUserProfile = async (req, res) => {
-    const {
-        id: userId,
-        username,
-        email,
-        profile_pic_url,
-        allow_stranger_follow,
-    } = req.user;
+    const { id: userId, username, email, allow_stranger_follow } = req.user;
     if (req.body.allow_stranger_follow || req.body.info) {
         const user = new User({ id: userId });
         await user.save(req.body);
@@ -195,7 +189,7 @@ const editUserProfile = async (req, res) => {
         }
         await user.save(updateArgs);
         res.send({
-            data: responseBody,
+            data: { ...responseBody },
         });
         return;
     }
