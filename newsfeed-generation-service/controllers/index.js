@@ -13,12 +13,13 @@ const createUser = async (req, res) => {
     const userId = req.query["user-id"];
     const timestampStart = Date.now();
     try {
-        await User.insertOne({
-            user_id: userId,
+        const newUser = new User({
+            user_id: +userId,
             newsfeed: [],
             affinity: [],
             affinity_with_self: [],
         });
+        await newUser.save();
         console.log(
             `Insertion of user #${userId} complete; took ${
                 Date.now() - timestampStart
