@@ -162,9 +162,9 @@ const recalcAffinityTable = async () => {
         const otherUsers = Object.keys(userAffinityTable[user]);
         for (let otherUser of otherUsers) {
             otherUser = +otherUser;
-            const oldAffinityWithUser = batchUserAffinity[user].find(
-                (el) => el.user_id === otherUser
-            );
+            const oldAffinityWithUser = batchUserAffinity[user]
+                ? batchUserAffinity[user].find((el) => el.user_id === otherUser)
+                : null;
             if (
                 // old affinity is null but new one is not
                 (!oldAffinityWithUser && userAffinityTable[user][otherUser]) ||
