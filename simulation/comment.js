@@ -38,6 +38,6 @@ const randomComment = async () => {
     console.log("Simulation done.");
 };
 
-const createRandomComment = schedule.scheduleJob("* * * * * *", async () => {
+const createRandomComment = schedule.scheduleJob("0 * * * *", async () => {
     await randomComment();
 });
