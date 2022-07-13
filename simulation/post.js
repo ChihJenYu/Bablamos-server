@@ -44,6 +44,6 @@ const generateRandomPost = async () => {
     console.log("Simulation done.");
 };
 
-const createRandomPost = schedule.scheduleJob("0 */6 * * *", async () => {
+const createRandomPost = schedule.scheduleJob("0 * * * *", async () => {
     await generateRandomPost();
 });

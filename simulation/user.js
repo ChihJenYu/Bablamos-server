@@ -138,11 +138,11 @@ const createRandomUser = schedule.scheduleJob("0 */6 * * *", async () => {
     await randomUserSignup();
 });
 
-const createRandomLikePost = schedule.scheduleJob("*/5 * * * *", async () => {
+const createRandomLikePost = schedule.scheduleJob("* * * * *", async () => {
     await randomLikeOnPost();
 });
 
-const createRandomLikeComment = schedule.scheduleJob("0 * * * *", async () => {
+const createRandomLikeComment = schedule.scheduleJob("*/30 * * * *", async () => {
     await randomLikeOnComment();
 });
 
