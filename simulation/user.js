@@ -133,27 +133,27 @@ const createRandomUser = schedule.scheduleJob("0 * * * *", async () => {
 });
 
 const createRandomLikePost = schedule.scheduleJob(
-    "*/10 * * * * *",
+    "*/15 * * * * *",
     async () => {
         await randomLikeOnPost();
     }
 );
 
 const createRandomLikeComment = schedule.scheduleJob(
-    "*/15 * * * *",
+    "* * * * *",
     async () => {
         await randomLikeOnComment();
     }
 );
 
 const createRandomFriendRequest = schedule.scheduleJob(
-    "0/15 * * * *",
+    "*/15 * * * *",
     async () => {
         await randomSendFriendRequest();
     }
 );
 
-const createRandomFriend = schedule.scheduleJob("0/15 * * * *", async () => {
+const createRandomFriend = schedule.scheduleJob("*/15 * * * *", async () => {
     await randomAcceptFriendRequest();
 });
 

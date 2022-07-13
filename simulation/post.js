@@ -21,7 +21,7 @@ const generateRandomPost = async () => {
     const isShare = Math.random() > 0.5;
     let sharedPostId = undefined;
     if (isShare) {
-        const { id } = Post.getRandomPost({});
+        const { id } = await Post.getRandomPost({});
         sharedPostId = id;
     }
     // get access_token

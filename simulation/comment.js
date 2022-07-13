@@ -36,6 +36,6 @@ const randomComment = async () => {
     );
 };
 
-const createRandomComment = schedule.scheduleJob("*/3 * * * *", async () => {
+const createRandomComment = schedule.scheduleJob("* * * * *", async () => {
     await randomComment();
 });
