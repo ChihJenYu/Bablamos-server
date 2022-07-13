@@ -4,7 +4,6 @@ const axios = require("axios");
 const schedule = require("node-schedule");
 const User = require("../models/user");
 const Post = require("../models/post");
-const Comment = require("../models/comment");
 const { faker } = require("@faker-js/faker");
 const capitalize = (str) => {
     const lower = str.toLowerCase();
@@ -35,9 +34,8 @@ const randomComment = async () => {
             },
         }
     );
-    console.log("Simulation done.");
 };
 
-const createRandomComment = schedule.scheduleJob("0 * * * *", async () => {
+const createRandomComment = schedule.scheduleJob("*/15 * * * *", async () => {
     await randomComment();
 });

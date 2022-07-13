@@ -125,6 +125,10 @@ const userSignIn = async (req, res) => {
     }
 };
 
+const userSignOut = async (req, res) => {
+    res.sendStatus(200);
+};
+
 const editUserProfile = async (req, res) => {
     const { id: userId, username, email, allow_stranger_follow } = req.user;
     if (req.body.allow_stranger_follow || req.body.info) {
@@ -589,6 +593,7 @@ const readPost = (req, res) => {
 module.exports = {
     userSignUp,
     userSignIn,
+    userSignOut,
     editUserProfile,
     getNewsfeed,
     getUserInfo,

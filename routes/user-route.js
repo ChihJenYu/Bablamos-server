@@ -5,6 +5,7 @@ const { authentication } = require("../middlewares/auth");
 const {
     userSignUp,
     userSignIn,
+    userSignOut,
     editUserProfile,
     getNewsfeed,
     getUserInfo,
@@ -34,6 +35,10 @@ router
 router.route("/user/signin").post(asyncErrorHandler(userSignIn));
 
 router
+    .route("/user/signout")
+    .post([authentication, asyncErrorHandler(userSignOut)]);
+
+router
     .route("/user/newsfeed")
     .get([authentication, asyncErrorHandler(getNewsfeed)]);
 
@@ -43,8 +48,8 @@ router
     .patch([
         authentication,
         multer({ dest: null }).fields([
-            {name: "cover-pic"},
-            {name: "profile-pic"}
+            { name: "cover-pic" },
+            { name: "profile-pic" },
         ]),
         asyncErrorHandler(editUserProfile),
     ]);
@@ -60,7 +65,9 @@ router
     .post([authentication, asyncErrorHandler(userBefriends)]) // action, user-id
     .delete([authentication, asyncErrorHandler(userUnfriends)]); // user-id
 
-router.route("/user/search").get([authentication, asyncErrorHandler(searchUsers)]);
+router
+    .route("/user/search")
+    .get([authentication, asyncErrorHandler(searchUsers)]);
 
 // id (id of user to be followed)
 router

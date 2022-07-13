@@ -1,7 +1,8 @@
 const db = require("../mysql");
 const Edge = require("./edge");
 const User = require("./user");
-
+// user_id mod me
+const POPULAR_CRITERIA = 100;
 class Post extends Edge {
     constructor({
         id,
@@ -30,9 +31,15 @@ class Post extends Edge {
         this.tags = tags || [];
     }
 
-    static async getRandomPost() {
+    static async getRandomPost({ favor }) {
+        if (!favor || (favor && Math.random() < 0.3)) {
+            const [randomPost] = await db.pool.query(
+                "SELECT * FROM post ORDER BY RAND() LIMIT 1"
+            );
+            return randomPost[0];
+        }
         const [randomPost] = await db.pool.query(
-            "SELECT * FROM post ORDER BY RAND() LIMIT 1"
+            "SELECT * FROM post WHERE user_id % 100 = 0 ORDER BY RAND() LIMIT 1"
         );
         return randomPost[0];
     }

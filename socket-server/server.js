@@ -15,12 +15,9 @@ const io = socketio(server, {
 
 io.on("connection", (socket) => {
     socket.on("login", async ({ user_id }) => {
-        console.log("Connected client: ", socket.id);
-        console.log("Connected user's id: ", user_id);
         const onlineUser = new OnlineUser({ user_id, socket_id: socket.id });
         const beginTime = Date.now();
         await onlineUser.save();
-        console.log(`Inserting online user took ${Date.now() - beginTime}ms`);
     });
 
     socket.on(
@@ -68,14 +65,8 @@ io.on("connection", (socket) => {
     );
 
     socket.on("disconnect", async () => {
-        console.log("Disconnected client: ", socket.id);
         const beginTime = Date.now();
         await OnlineUser.delete({ socket_id: socket.id });
-        console.log(
-            `Removing online user took ${
-                Date.now() - beginTime
-            }ms\n----------------------------`
-        );
     });
 });
 

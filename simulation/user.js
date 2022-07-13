@@ -26,12 +26,11 @@ const randomUserSignup = async () => {
             },
         }
     );
-    console.log("Simulation done.");
 };
 
 const randomLikeOnPost = async () => {
     const randomUser = await User.getRandomUser();
-    const randomPost = await Post.getRandomPost();
+    const randomPost = await Post.getRandomPost({ favor: true });
     const { token } = User.staticGenerateAuthToken(randomUser);
     await axios.post(
         `${MY_HOST}/user/like`,
@@ -45,7 +44,6 @@ const randomLikeOnPost = async () => {
             },
         }
     );
-    console.log("Simulation done.");
 };
 
 const randomLikeOnComment = async () => {
@@ -64,7 +62,6 @@ const randomLikeOnComment = async () => {
             },
         }
     );
-    console.log("Simulation done.");
 };
 
 const randomSendFriendRequest = async () => {
@@ -80,7 +77,6 @@ const randomSendFriendRequest = async () => {
             },
         }
     );
-    console.log("Simulation done.");
 };
 
 const randomAcceptFriendRequest = async () => {
@@ -103,7 +99,6 @@ const randomAcceptFriendRequest = async () => {
             }
         );
     }
-    console.log("Simulation done.");
 };
 
 const randomEditUserProfilePhoto = async () => {
@@ -131,34 +126,39 @@ const randomEditUserProfilePhoto = async () => {
     // save changes to db
     const user = new User(randomUser);
     await user.save({ user_profile_pic: 1 });
-    console.log("Simulation done.");
 };
 
-const createRandomUser = schedule.scheduleJob("0 */6 * * *", async () => {
+const createRandomUser = schedule.scheduleJob("0 * * * *", async () => {
     await randomUserSignup();
 });
 
-const createRandomLikePost = schedule.scheduleJob("*/30 * * * * *", async () => {
-    await randomLikeOnPost();
-});
+const createRandomLikePost = schedule.scheduleJob(
+    "*/10 * * * * *",
+    async () => {
+        await randomLikeOnPost();
+    }
+);
 
-const createRandomLikeComment = schedule.scheduleJob("*/30 * * * *", async () => {
-    await randomLikeOnComment();
-});
+const createRandomLikeComment = schedule.scheduleJob(
+    "*/15 * * * *",
+    async () => {
+        await randomLikeOnComment();
+    }
+);
 
 const createRandomFriendRequest = schedule.scheduleJob(
-    "0 * * * *",
+    "0/15 * * * *",
     async () => {
         await randomSendFriendRequest();
     }
 );
 
-const createRandomFriend = schedule.scheduleJob("0 */6 * * *", async () => {
+const createRandomFriend = schedule.scheduleJob("0/15 * * * *", async () => {
     await randomAcceptFriendRequest();
 });
 
 const createRandomUserProfilePhoto = schedule.scheduleJob(
-    "0 * * * *",
+    "*/30 * * * *",
     async () => {
         await randomEditUserProfilePhoto();
     }
