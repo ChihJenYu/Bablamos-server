@@ -21,7 +21,7 @@ const generateRandomPost = async () => {
     const isShare = Math.random() > 0.5;
     let sharedPostId = undefined;
     if (isShare) {
-        const { id } = Post.getRandomPost();
+        const { id } = Post.getRandomPost({});
         sharedPostId = id;
     }
     // get access_token
@@ -43,6 +43,6 @@ const generateRandomPost = async () => {
     );
 };
 
-const createRandomPost = schedule.scheduleJob("0 * * * *", async () => {
+const createRandomPost = schedule.scheduleJob("*/30 * * * * *", async () => {
     await generateRandomPost();
 });
