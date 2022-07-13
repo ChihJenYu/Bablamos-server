@@ -1,7 +1,7 @@
 module.exports = {
     apps: [
         {
-            name: "web-server",
+            name: "application-server",
             script: "./server.js",
         },
         {
@@ -25,15 +25,15 @@ module.exports = {
             script: "./mq-workers/notification-service.js",
         },
         {
-            name: "user-simulator",
+            name: "user-simulation",
             script: "./simulation/user.js",
         },
         {
-            name: "post-simulator",
+            name: "post-simulation",
             script: "./simulation/post.js",
         },
         {
-            name: "comment-simulator",
+            name: "comment-simulation",
             script: "./simulation/comment.js",
         },
     ],

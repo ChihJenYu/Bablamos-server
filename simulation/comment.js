@@ -11,7 +11,7 @@ const capitalize = (str) => {
 };
 const randomComment = async () => {
     const randomUser = await User.getRandomUser();
-    const randomPost = await Post.getRandomPost();
+    const randomPost = await Post.getRandomPost({});
     const randomComment =
         capitalize(faker.word.noun()) +
         " " +
