@@ -290,29 +290,6 @@ const getNewsfeed = async (req, res) => {
             userAsking,
             paging
         );
-
-        for (let i = 0; i < newsfeedToReturn.length; i++) {
-            const feed = newsfeedToReturn[i];
-            feed.profile_pic_url = User.generatePictureUrl({
-                has_profile: feed.user_profile_pic == 1,
-                id: feed.user_id,
-            });
-            feed.latest_comments = feed.latest_comments.map((comment) => {
-                return {
-                    ...comment,
-                    profile_pic_url: User.generatePictureUrl({
-                        has_profile: comment.user_profile_pic == 1,
-                        id: comment.user_id,
-                    }),
-                };
-            });
-            if (feed.shared_post_id) {
-                feed.shared_post_data = await Post.getSharedData(
-                    feed.shared_post_id
-                );
-            }
-            newsfeedToReturn[i] = feed;
-        }
         res.send({ data: newsfeedToReturn });
     }
 };

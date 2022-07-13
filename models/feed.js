@@ -2,6 +2,7 @@ const db = require("../mysql");
 const Post = require("./post");
 const User = require("./user");
 const PERSONAL_FEEDS_DEFAULT_PAGE_SIZE = 10;
+const COMMENT_PAGE_SIZE = 3;
 class Feed extends Post {
     constructor({
         id, // required
@@ -148,12 +149,33 @@ class Feed extends Post {
                 tags: feed.tags || [],
                 mentioned_users: feed.mentioned_users || [],
             });
-            const latestComments = await Feed.getLatestComments(
+            const { latestComments, next } = await Feed.getLatestComments(
                 feed.id,
-                10,
+                COMMENT_PAGE_SIZE,
                 user_asking
             );
             newFeed.latest_comments = latestComments || [];
+            if (next) {
+                newFeed.comments_next_paging = next;
+            }
+            newFeed.profile_pic_url = User.generatePictureUrl({
+                has_profile: newFeed.user_profile_pic == 1,
+                id: newFeed.user_id,
+            });
+            newFeed.latest_comments = newFeed.latest_comments.map((comment) => {
+                return {
+                    ...comment,
+                    profile_pic_url: User.generatePictureUrl({
+                        has_profile: comment.user_profile_pic == 1,
+                        id: comment.user_id,
+                    }),
+                };
+            });
+            if (newFeed.shared_post_id) {
+                newFeed.shared_post_data = await Post.getSharedData(
+                    newFeed.shared_post_id
+                );
+            }
             newsfeedToReturn.push(newFeed);
         }
         return newsfeedToReturn;
@@ -250,8 +272,14 @@ class Feed extends Post {
                 tags: feed.tags || [],
                 mentioned_users: feed.mentioned_users || [],
             });
-            const latestComments = await Feed.getLatestComments(feed.id, 10);
+            const { latestComments, next } = await Feed.getLatestComments(
+                feed.id,
+                COMMENT_PAGE_SIZE
+            );
             newFeed.latest_comments = latestComments || [];
+            if (next) {
+                newFeed.comments_next_paging = next;
+            }
             newsfeedToReturn.push(newFeed);
         }
         return newsfeedToReturn;
@@ -425,9 +453,9 @@ class Feed extends Post {
         if (feedDetail.length === 0) {
             return null;
         }
-        const latestComments = await Feed.getLatestComments(
+        const { latestComments, next } = await Feed.getLatestComments(
             post_id,
-            10,
+            COMMENT_PAGE_SIZE,
             user_asking
         );
         const feed = new Feed({
@@ -436,6 +464,9 @@ class Feed extends Post {
             tags: feedDetail[0].tags || [],
             mentioned_users: feedDetail[0].mentioned_users || [],
         });
+        if (next) {
+            feed.comments_next_paging = next;
+        }
         feed.profile_pic_url = User.generatePictureUrl({
             has_profile: feed.user_profile_pic == 1,
             id: feed.user_id,
@@ -483,10 +514,21 @@ class Feed extends Post {
             
             where c.post_id = ? group by c.id order by c.created_at desc limit ?`,
             user_asking
-                ? [user_asking, post_id, comment_count]
-                : [post_id, comment_count]
+                ? [user_asking, post_id, comment_count + 1]
+                : [post_id, comment_count + 1]
         );
-        return latestComments;
+        if (latestComments.length > comment_count) {
+            return {
+                latestComments: latestComments.slice(
+                    0,
+                    latestComments.length - 1
+                ),
+                next: 1,
+            };
+        }
+        return {
+            latestComments,
+        };
     }
 }
 

@@ -1,6 +1,5 @@
 const db = require("../mysql");
 const Edge = require("./edge");
-
 class Comment extends Edge {
     constructor({
         id,
@@ -142,13 +141,35 @@ class Comment extends Edge {
         }
     }
 
-    static async find(cols, filter, fat = false) {
+    static async find(cols, filter) {
         const colsClause = db.translateCols(cols);
         let query;
         const { whereClause, args } = db.translateFilter(filter);
         query = `select ${colsClause} from comment ${whereClause}`;
         const [result] = await db.pool.query(query, args);
         return result;
+    }
+
+    // with next_paging
+    static async getComments({ post_id, paging, page_size, user_asking }) {
+        let [comments] = await db.pool.query(
+            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
+            sum(
+                case when lu.user_id is null then 0 else 1 end
+            ) as like_count, case when
+                al.comment_id is null
+                then 0
+                else 1
+                end as already_liked
+            from comment c join user u on c.user_id = u.id
+            left join like_user lu on c.id = lu.comment_id
+            left join (
+                        select comment_id from like_user where user_id = ?
+                    ) as al on c.id = al.comment_id
+            where c.post_id = ? group by c.id order by c.created_at desc limit ?, ?`,
+            [user_asking, post_id, paging * page_size, page_size + 1]
+        );
+        return comments;
     }
 }
 

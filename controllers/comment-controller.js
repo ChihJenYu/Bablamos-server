@@ -1,5 +1,7 @@
 const Comment = require("../models/comment");
 const Post = require("../models/post");
+const User = require("../models/user");
+const COMMENT_PAGE_SIZE = 3;
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
@@ -113,4 +115,40 @@ const deleteComment = async (req, res) => {
     });
 };
 
-module.exports = { createComment, editComment, deleteComment };
+const getComments = async (req, res) => {
+    const post_id = req.query["post-id"];
+    const paging = +req.query.paging || 0;
+    const user_id = req.user.id;
+    const comments = await Comment.getComments({
+        post_id,
+        paging,
+        page_size: COMMENT_PAGE_SIZE,
+        user_asking: user_id,
+    });
+
+    const commentsToReturn = comments.map((comment) => {
+        return {
+            ...comment,
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: comment.user_profile_pic == 1,
+                id: comment.user_id,
+            }),
+        };
+    });
+
+    let next_paging;
+    if (comments.length > COMMENT_PAGE_SIZE) {
+        next_paging = paging + 1;
+        res.send({
+            data: {
+                comments: commentsToReturn.slice(0, comments.length - 1),
+                next_paging,
+            },
+        });
+        return;
+    }
+    res.send({ data: { comments: commentsToReturn } });
+    return;
+};
+
+module.exports = { createComment, editComment, deleteComment, getComments };
