@@ -64,6 +64,23 @@ io.on("connection", (socket) => {
         }
     );
 
+    socket.on("invalidate_notification_event", async ({ for_user_id, id }) => {
+        console.log({
+            for_user_id,
+            id,
+        });
+        const result = await OnlineUser.find(["socket_id"], {
+            user_id: for_user_id,
+        });
+        if (result.length === 0) {
+            return;
+        }
+        const { socket_id } = result[0];
+        io.to(socket_id).emit("invalidate_notification", {
+            id,
+        });
+    });
+
     socket.on("disconnect", async () => {
         const beginTime = Date.now();
         await OnlineUser.delete({ socket_id: socket.id });

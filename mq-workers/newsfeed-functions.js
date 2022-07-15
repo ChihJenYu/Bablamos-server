@@ -3,10 +3,19 @@ const {
     generateUserAffinityTable,
     calculateLikeScore,
     calculateCommentScore,
-    POP_WEIGHT,
     calculateShareScore,
 } = require("../newsfeed-generation-service/models");
 require("../newsfeed-generation-service/mongoose");
+const {
+    POP_LIKE_WEIGHT,
+    POP_SHARE_WEIGHT,
+    POP_COMMENT_WEIGHT,
+    ONE_HOUR_TIME_DECAY,
+    SIX_HOUR_TIME_DECAY,
+    ONE_DAY_TIME_DECAY,
+    DAYS_BASE,
+    ALREADY_SEEN_BASE,
+} = process.env;
 const User = require("../newsfeed-generation-service/models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
@@ -23,30 +32,25 @@ const updatePopularity = {
                         "$$n",
                         {
                             popularity: {
-                                $multiply: [
+                                $sum: [
                                     {
-                                        $sum: [
-                                            {
-                                                $multiply: [
-                                                    1,
-                                                    "$$n.like_score",
-                                                ],
-                                            },
-                                            {
-                                                $multiply: [
-                                                    2,
-                                                    "$$n.comment_score",
-                                                ],
-                                            },
-                                            {
-                                                $multiply: [
-                                                    3,
-                                                    "$$n.share_score",
-                                                ],
-                                            },
+                                        $multiply: [
+                                            POP_LIKE_WEIGHT,
+                                            "$$n.like_score",
                                         ],
                                     },
-                                    POP_WEIGHT,
+                                    {
+                                        $multiply: [
+                                            POP_COMMENT_WEIGHT,
+                                            "$$n.comment_score",
+                                        ],
+                                    },
+                                    {
+                                        $multiply: [
+                                            POP_SHARE_WEIGHT,
+                                            "$$n.share_score",
+                                        ],
+                                    },
                                 ],
                             },
                         },
@@ -72,8 +76,13 @@ const updateEdgeRankScore = {
                                     {
                                         $divide: [
                                             {
-                                                $sum: [
-                                                    "$$n.affinity",
+                                                $multiply: [
+                                                    {
+                                                        $sum: [
+                                                            "$$n.affinity",
+                                                            1,
+                                                        ],
+                                                    },
                                                     "$$n.popularity",
                                                 ],
                                             },
@@ -81,7 +90,7 @@ const updateEdgeRankScore = {
                                         ],
                                     },
                                     {
-                                        $pow: [1.25, "$$n.views"],
+                                        $pow: [ALREADY_SEEN_BASE, "$$n.views"],
                                     },
                                 ],
                             },
@@ -254,7 +263,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": 1.1,
+                    "newsfeed.$[el].time_decay_factor": ONE_HOUR_TIME_DECAY,
                 },
             },
             {
@@ -272,7 +281,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": 1.2,
+                    "newsfeed.$[el].time_decay_factor": SIX_HOUR_TIME_DECAY,
                 },
             },
             {
@@ -290,7 +299,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": 1.3,
+                    "newsfeed.$[el].time_decay_factor": ONE_DAY_TIME_DECAY,
                 },
             },
             {
@@ -304,12 +313,11 @@ const recalcTimeDecayFactor = async ({ type }) => {
                 ],
             }
         );
-    } else {
         await User.updateMany(
             {},
             {
-                $mul: {
-                    "newsfeed.$[el].time_decay_factor": 1.1,
+                $set: {
+                    "newsfeed.$[el].time_decay_factor": DAYS_BASE,
                 },
             },
             {
@@ -319,17 +327,18 @@ const recalcTimeDecayFactor = async ({ type }) => {
                             $lte: Date.now() / 1000 - 60 * 60 * 24,
                         },
                         "el.time_decay_factor": {
-                            $gte: 1.4,
+                            $lt: DAYS_BASE,
                         },
                     },
                 ],
             }
         );
+    } else {
         await User.updateMany(
             {},
             {
-                $set: {
-                    "newsfeed.$[el].time_decay_factor": 1.4,
+                $mul: {
+                    "newsfeed.$[el].time_decay_factor": DAYS_BASE,
                 },
             },
             {
@@ -339,7 +348,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
                             $lte: Date.now() / 1000 - 60 * 60 * 24,
                         },
                         "el.time_decay_factor": {
-                            $lt: 1.4,
+                            $gte: DAYS_BASE,
                         },
                     },
                 ],

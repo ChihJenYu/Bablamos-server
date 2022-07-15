@@ -495,6 +495,12 @@ const userUnfriends = async (req, res) => {
     const friend_userid = +req.query["user-id"];
     await User.unfriend({ outgoing_user_id, friend_userid });
     res.sendStatus(200);
+    notificationDispatcherJobQueue.add({
+        function: "invalidateNotification",
+        type: 5,
+        user_id: outgoing_user_id,
+        for_user_id: friend_userid,
+    });
 };
 
 // /user/follow?id=
@@ -518,12 +524,12 @@ const userUnfollows = async (req, res) => {
     const following_userid = +req.query.id;
     await User.unfollow({ outgoing_user_id, following_userid });
     res.sendStatus(200);
-    // notificationDispatcherJobQueue.add({
-    //     function: "invalidateNotification",
-    //     type: 4,
-    //     user_id: outgoing_user_id,
-    //     for_user_id: following_userid,
-    // });
+    notificationDispatcherJobQueue.add({
+        function: "invalidateNotification",
+        type: 4,
+        user_id: outgoing_user_id,
+        for_user_id: following_userid,
+    });
 };
 
 // /user/following

@@ -1,13 +1,22 @@
 const db = require("../mysql");
 const { getValueOr } = require("../../utils/util");
 // AFFINITY
-const MESSAGE_WEIGHT = 4;
-const MENTION_WEIGHT = 3;
-const COMMENT_WEIGHT = 2;
-const LIKE_WEIGHT = 1;
+const {
+    AFFINITY_MENTION_WEIGHT,
+    AFFINITY_COMMENT_WEIGHT,
+    AFFINITY_LIKE_WEIGHT,
+    POP_SHARE_WEIGHT,
+    POP_COMMENT_WEIGHT,
+    POP_LIKE_WEIGHT,
+    TEN_MINUTE_TIME_DECAY,
+    ONE_HOUR_TIME_DECAY,
+    SIX_HOUR_TIME_DECAY,
+    ONE_DAY_TIME_DECAY,
+    DAYS_BASE,
+    ALREADY_SEEN_BASE,
+} = process.env;
 
 // EDGE WEIGHT
-const POP_WEIGHT = 2;
 const ENV = "dev"; // in dev query from friendship instead of followship
 
 // getUserIds({type: "all"})
@@ -208,38 +217,28 @@ const generateUserAffinityTable = async () => {
                 [userId, otherUserId],
                 0
             );
-            const mentionScore =
-                2 * outgoingMentions +
-                incomingMentions;
+            const mentionScore = 2 * outgoingMentions + incomingMentions;
 
             // calculate like score
             const outgoingLikesOnEventfulEdge = getValueOr(
                 userLikesTable,
-                [otherUserId,
-                userId,
-                "eventful_edge"],
+                [otherUserId, userId, "eventful_edge"],
                 0
             );
 
             const incomingLikesOnEventfulEdge = getValueOr(
                 userLikesTable,
-                [userId,
-                otherUserId,
-                "eventful_edge"],
+                [userId, otherUserId, "eventful_edge"],
                 0
             );
             const outgoingLikesOnNonEventfulEdge = getValueOr(
                 userLikesTable,
-                [otherUserId,
-                userId,
-                "comment"],
+                [otherUserId, userId, "comment"],
                 0
             );
             const incomingLikesOnNonEventfulEdge = getValueOr(
                 userLikesTable,
-                [userId,
-                otherUserId,
-                "comment"],
+                [userId, otherUserId, "comment"],
                 0
             );
             const likeScore =
@@ -249,9 +248,9 @@ const generateUserAffinityTable = async () => {
                 incomingLikesOnNonEventfulEdge;
 
             const affinity =
-                COMMENT_WEIGHT * commentScore +
-                MENTION_WEIGHT * mentionScore +
-                LIKE_WEIGHT * likeScore;
+                AFFINITY_COMMENT_WEIGHT * commentScore +
+                AFFINITY_MENTION_WEIGHT * mentionScore +
+                AFFINITY_LIKE_WEIGHT * likeScore;
 
             userAffinityTable[userId][otherUserId] =
                 affinity == 0 ? undefined : affinity;
@@ -260,38 +259,38 @@ const generateUserAffinityTable = async () => {
     return userAffinityTable;
 };
 
-const calculateLikeScore = (lc) => lc;
+const calculateLikeScore = (lc) => POP_LIKE_WEIGHT * lc;
 
-const calculateCommentScore = (cc) => 2 * cc;
+const calculateCommentScore = (cc) => POP_COMMENT_WEIGHT * cc;
 
-const calculateShareScore = (sc) => 3 * sc;
+const calculateShareScore = (sc) => POP_SHARE_WEIGHT * sc;
 
-const calculatePopularity = (ls, cs, ss) => POP_WEIGHT * (ls + cs + ss);
+const calculatePopularity = (ls, cs, ss) => ls + cs + ss;
 
 const calculateTimeDecayFactor = (feed) => {
     const feedCreatedAtUnix = feed.created_at;
     const nowUnix = Date.now() / 1000;
     const timeDiff = nowUnix - feedCreatedAtUnix;
     if (timeDiff < 60 * 10) {
-        return 0.01;
+        return TEN_MINUTE_TIME_DECAY;
     } else if ((timeDiff >= 60 * 10) & (timeDiff < 60 * 60)) {
-        return 1.1;
+        return ONE_HOUR_TIME_DECAY;
     } else if ((timeDiff >= 60 * 60 * 1) & (timeDiff < 60 * 60 * 6)) {
-        return 1.2;
+        return SIX_HOUR_TIME_DECAY;
     } else if ((timeDiff >= 60 * 60 * 6) & (timeDiff < 60 * 60 * 24)) {
-        return 1.3;
+        return ONE_DAY_TIME_DECAY;
     } else {
         const daysPassed = Math.floor(timeDiff / (60 * 60 * 24));
-        return 1.4 * Math.pow(1.1, daysPassed);
+        return Math.pow(DAYS_BASE, daysPassed);
     }
 };
 
 const calculateAlreadySeenFactor = (views) => {
-    return Math.pow(1.25, views);
+    return Math.pow(ALREADY_SEEN_BASE, views);
 };
 
 const calcEdgeRankScore = (af, pop, td, v) =>
-    (af + pop) / td / calculateAlreadySeenFactor(v);
+    ((1 + af) * pop) / td / calculateAlreadySeenFactor(v);
 
 module.exports = {
     getUserIds,
@@ -302,5 +301,4 @@ module.exports = {
     calculatePopularity,
     calculateTimeDecayFactor,
     calcEdgeRankScore,
-    POP_WEIGHT,
 };

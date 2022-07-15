@@ -106,12 +106,8 @@ const deleteComment = async (req, res) => {
         post_id: "" + post_id,
         type: "comment",
     });
-    notificationDispatcherJobQueue.add({
-        function: "invalidateNotification",
-        type: 2,
-        post_id,
-        user_id: req.user.id,
-        comment_id,
+    const [{ user_id: for_user_id }] = await Post.find(["user_id"], {
+        id: post_id,
     });
 };
 

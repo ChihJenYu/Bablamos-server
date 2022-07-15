@@ -128,7 +128,6 @@ const deletePost = async (req, res) => {
     console.log("Calling notification service...");
     notificationDispatcherJobQueue.add({
         function: "invalidateNotification",
-        type: 1,
         post_id: deletedPost.id,
         user_id: deletedPost.user_id,
     });

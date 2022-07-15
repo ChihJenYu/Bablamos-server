@@ -138,6 +138,63 @@ class Notification {
         );
         return result[0] ? result[0].unread_count : 0;
     }
+
+    // returns array of deleted notification ids
+    static async bulkDelete(filter) {
+        const { inv_post_id, type_id, for_user_id, inv_user_id, read_by_user } =
+            filter;
+        const conn = await db.pool.getConnection();
+        if (inv_post_id) {
+            // remove every notification with this inv_post_id
+            try {
+                await conn.query("START TRANSACTION");
+                await conn.query(
+                    `DELETE n FROM notification n JOIN notification_detail nd on n.id = nd.notification_id WHERE inv_post_id = ?`,
+                    [inv_post_id]
+                );
+                await conn.query("COMMIT");
+                return true;
+            } catch (e) {
+                await conn.query("ROLLBACK");
+                console.log(e);
+                return false;
+            } finally {
+                await conn.release();
+            }
+        }
+        if (!read_by_user) {
+            try {
+                await conn.query("START TRANSACTION");
+                await conn.query(
+                    `DELETE n FROM notification n JOIN notification_detail nd on n.id = nd.notification_id WHERE n.for_user_id = ? and 
+            nd.inv_user_id = ? and
+            n.notification_type_id = ?`,
+                    [for_user_id, inv_user_id, type_id]
+                );
+                await conn.query("COMMIT");
+                return [];
+            } catch (e) {
+                await conn.query("ROLLBACK");
+                console.log(e);
+                return false;
+            } finally {
+                await conn.release();
+            }
+        }
+        try {
+            await conn.query("START TRANSACTION");
+            await conn.query(
+                `DELETE FROM notification WHERE updated_at < NOW() - INTERVAL 24 hour AND read_by_user = ?`, [read_by_user]);
+            await conn.query("COMMIT");
+            return true;
+        } catch (e) {
+            await conn.query("ROLLBACK");
+            console.log(e);
+            return false;
+        } finally {
+            await conn.release();
+        }
+    }
 }
 
 module.exports = Notification;

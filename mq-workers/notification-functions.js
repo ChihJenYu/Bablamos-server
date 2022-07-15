@@ -232,8 +232,56 @@ const pushNotification = async (args) => {
     }
 };
 
-const invalidateNotification = async () => {
-    console.log("Invalidate");
+const invalidateNotification = async (args) => {
+    if (args.post_id === 1) {
+        let { post_id } = args;
+        await Notification.bulkDelete({
+            inv_post_id: post_id,
+        });
+        return;
+    }
+    if (args.type === 4) {
+        // user unfollows
+        const { user_id, for_user_id } = args;
+        await Notification.bulkDelete({
+            for_user_id,
+            inv_user_id: user_id,
+            type_id: args.type,
+        });
+    }
+    if (args.type === 5) {
+        // user unfriends; actual notification type id could be 5 or 6
+        const { user_id, for_user_id } = args;
+        // notificationsToDelete: [{id, for_user_id}]
+        await Notification.bulkDelete({
+            for_user_id,
+            inv_user_id: user_id,
+            type_id: 5,
+        });
+        await Notification.bulkDelete({
+            for_user_id: user_id,
+            inv_user_id: for_user_id,
+            type_id: 5,
+        });
+        await Notification.bulkDelete({
+            for_user_id,
+            inv_user_id: user_id,
+            type_id: 6,
+        });
+        await Notification.bulkDelete({
+            for_user_id: user_id,
+            inv_user_id: for_user_id,
+            type_id: 6,
+        });
+    }
 };
 
-module.exports = { pushNotification, invalidateNotification };
+const clearNotifications = async () => {
+    await Notification.bulkDelete({ read_by_user: 1 });
+};
+
+module.exports = {
+    pushNotification,
+    invalidateNotification,
+    clearNotifications,
+};

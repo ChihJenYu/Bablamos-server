@@ -43,6 +43,6 @@ const generateRandomPost = async () => {
     );
 };
 
-const createRandomPost = schedule.scheduleJob("*/30 * * * * *", async () => {
+const createRandomPost = schedule.scheduleJob("*/30 * * * *", async () => {
     await generateRandomPost();
 });
