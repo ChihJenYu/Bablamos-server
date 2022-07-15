@@ -208,6 +208,9 @@ const pushNotification = async (args) => {
             id: shared_post_id,
         });
         const sharedUserId = sharedUserPacket.user_id;
+        if (user_id === sharedUserId) {
+            return;
+        }
         const { username, profile_pic_url } = await getUserDataFromUserId(
             user_id
         );
