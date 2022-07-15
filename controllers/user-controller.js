@@ -495,6 +495,10 @@ const userUnfriends = async (req, res) => {
     const friend_userid = +req.query["user-id"];
     await User.unfriend({ outgoing_user_id, friend_userid });
     res.sendStatus(200);
+
+    
+
+    // invalidate related notifications
     notificationDispatcherJobQueue.add({
         function: "invalidateNotification",
         type: 5,

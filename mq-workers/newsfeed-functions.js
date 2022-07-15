@@ -35,19 +35,19 @@ const updatePopularity = {
                                 $sum: [
                                     {
                                         $multiply: [
-                                            POP_LIKE_WEIGHT,
+                                            +POP_LIKE_WEIGHT,
                                             "$$n.like_score",
                                         ],
                                     },
                                     {
                                         $multiply: [
-                                            POP_COMMENT_WEIGHT,
+                                            +POP_COMMENT_WEIGHT,
                                             "$$n.comment_score",
                                         ],
                                     },
                                     {
                                         $multiply: [
-                                            POP_SHARE_WEIGHT,
+                                            +POP_SHARE_WEIGHT,
                                             "$$n.share_score",
                                         ],
                                     },
@@ -90,7 +90,7 @@ const updateEdgeRankScore = {
                                         ],
                                     },
                                     {
-                                        $pow: [ALREADY_SEEN_BASE, "$$n.views"],
+                                        $pow: [+ALREADY_SEEN_BASE, "$$n.views"],
                                     },
                                 ],
                             },
@@ -263,7 +263,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": ONE_HOUR_TIME_DECAY,
+                    "newsfeed.$[el].time_decay_factor": +ONE_HOUR_TIME_DECAY,
                 },
             },
             {
@@ -281,7 +281,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": SIX_HOUR_TIME_DECAY,
+                    "newsfeed.$[el].time_decay_factor": +SIX_HOUR_TIME_DECAY,
                 },
             },
             {
@@ -299,7 +299,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": ONE_DAY_TIME_DECAY,
+                    "newsfeed.$[el].time_decay_factor": +ONE_DAY_TIME_DECAY,
                 },
             },
             {
@@ -317,7 +317,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $set: {
-                    "newsfeed.$[el].time_decay_factor": DAYS_BASE,
+                    "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
                 },
             },
             {
@@ -327,7 +327,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
                             $lte: Date.now() / 1000 - 60 * 60 * 24,
                         },
                         "el.time_decay_factor": {
-                            $lt: DAYS_BASE,
+                            $lt: +DAYS_BASE,
                         },
                     },
                 ],
@@ -338,7 +338,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
             {},
             {
                 $mul: {
-                    "newsfeed.$[el].time_decay_factor": DAYS_BASE,
+                    "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
                 },
             },
             {
@@ -348,7 +348,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
                             $lte: Date.now() / 1000 - 60 * 60 * 24,
                         },
                         "el.time_decay_factor": {
-                            $gte: DAYS_BASE,
+                            $gte: +DAYS_BASE,
                         },
                     },
                 ],

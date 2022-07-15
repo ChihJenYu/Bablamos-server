@@ -9,7 +9,6 @@ const {
 } = require("../models");
 const Feed = require("../../models/feed");
 const User = require("../models/user");
-const redisClient = require("../redis");
 
 const initialization = async () => {
     const beginTime = Date.now();

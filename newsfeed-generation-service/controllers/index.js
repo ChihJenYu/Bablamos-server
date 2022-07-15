@@ -118,9 +118,9 @@ const updateNewsfeed = async (req, res) => {
                                             comment_score: 0,
                                             share_score: 0,
                                             // popularity buff for new posts
-                                            popularity: FRESH_POP_BUFF,
+                                            popularity: +FRESH_POP_BUFF,
                                             time_decay_factor:
-                                                TEN_MINUTE_TIME_DECAY,
+                                                +TEN_MINUTE_TIME_DECAY,
                                             created_at: createdAt,
                                             views: 0,
                                             edge_rank_score:
@@ -128,8 +128,8 @@ const updateNewsfeed = async (req, res) => {
                                                     (affinityWithSelf[
                                                         followerId
                                                     ] || 0)) *
-                                                    FRESH_POP_BUFF) /
-                                                TEN_MINUTE_TIME_DECAY,
+                                                    +FRESH_POP_BUFF) /
+                                                +TEN_MINUTE_TIME_DECAY,
                                             is_new: true,
                                         },
                                     ],

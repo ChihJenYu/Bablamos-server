@@ -248,9 +248,9 @@ const generateUserAffinityTable = async () => {
                 incomingLikesOnNonEventfulEdge;
 
             const affinity =
-                AFFINITY_COMMENT_WEIGHT * commentScore +
-                AFFINITY_MENTION_WEIGHT * mentionScore +
-                AFFINITY_LIKE_WEIGHT * likeScore;
+                +AFFINITY_COMMENT_WEIGHT * commentScore +
+                +AFFINITY_MENTION_WEIGHT * mentionScore +
+                +AFFINITY_LIKE_WEIGHT * likeScore;
 
             userAffinityTable[userId][otherUserId] =
                 affinity == 0 ? undefined : affinity;
@@ -259,11 +259,11 @@ const generateUserAffinityTable = async () => {
     return userAffinityTable;
 };
 
-const calculateLikeScore = (lc) => POP_LIKE_WEIGHT * lc;
+const calculateLikeScore = (lc) => +POP_LIKE_WEIGHT * lc;
 
-const calculateCommentScore = (cc) => POP_COMMENT_WEIGHT * cc;
+const calculateCommentScore = (cc) => +POP_COMMENT_WEIGHT * cc;
 
-const calculateShareScore = (sc) => POP_SHARE_WEIGHT * sc;
+const calculateShareScore = (sc) => +POP_SHARE_WEIGHT * sc;
 
 const calculatePopularity = (ls, cs, ss) => ls + cs + ss;
 
@@ -272,16 +272,16 @@ const calculateTimeDecayFactor = (feed) => {
     const nowUnix = Date.now() / 1000;
     const timeDiff = nowUnix - feedCreatedAtUnix;
     if (timeDiff < 60 * 10) {
-        return TEN_MINUTE_TIME_DECAY;
+        return +TEN_MINUTE_TIME_DECAY;
     } else if ((timeDiff >= 60 * 10) & (timeDiff < 60 * 60)) {
-        return ONE_HOUR_TIME_DECAY;
+        return +ONE_HOUR_TIME_DECAY;
     } else if ((timeDiff >= 60 * 60 * 1) & (timeDiff < 60 * 60 * 6)) {
-        return SIX_HOUR_TIME_DECAY;
+        return +SIX_HOUR_TIME_DECAY;
     } else if ((timeDiff >= 60 * 60 * 6) & (timeDiff < 60 * 60 * 24)) {
-        return ONE_DAY_TIME_DECAY;
+        return +ONE_DAY_TIME_DECAY;
     } else {
         const daysPassed = Math.floor(timeDiff / (60 * 60 * 24));
-        return Math.pow(DAYS_BASE, daysPassed);
+        return Math.pow(+DAYS_BASE, daysPassed);
     }
 };
 
