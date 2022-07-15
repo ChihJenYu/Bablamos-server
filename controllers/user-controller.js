@@ -496,7 +496,13 @@ const userUnfriends = async (req, res) => {
     await User.unfriend({ outgoing_user_id, friend_userid });
     res.sendStatus(200);
 
-    
+    // call newsfeed generation service
+    // newsfeed.post(`/user/unfriend?outgoing-user-id=${outgoing_user_id}&friend-user-id=${friend_userid}`);
+    newsfeed.post(
+        `/user/unfriend`, {
+            outgoing_user_id, friend_userid
+        }
+    );
 
     // invalidate related notifications
     notificationDispatcherJobQueue.add({

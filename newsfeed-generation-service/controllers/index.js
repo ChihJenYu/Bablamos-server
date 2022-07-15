@@ -1,14 +1,8 @@
-const Feed = require("../../models/feed");
-const {
-    getUserIds,
-    calculateTimeDecayFactor,
-    calcEdgeRankScore,
-} = require("../models");
+const { getUserIds } = require("../models");
 const { FRESH_POP_BUFF, TEN_MINUTE_TIME_DECAY, ALREADY_SEEN_BASE } =
     process.env;
 const User = require("../models/user");
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
-const redisClient = require("../redis/");
 
 const createUser = async (req, res) => {
     const userId = req.query["user-id"];
@@ -23,6 +17,30 @@ const createUser = async (req, res) => {
         await newUser.save();
         console.log(
             `Insertion of user #${userId} complete; took ${
+                Date.now() - timestampStart
+            }ms`
+        );
+    } catch (e) {
+        console.log(e);
+    }
+};
+
+const removeUserFromNewsfeed = async (req, res) => {
+    const { outgoing_user_id, friend_userid } = req.body;
+    const timestampStart = Date.now();
+    try {
+        await User.updateOne(
+            { user_id: outgoing_user_id },
+            {
+                $pull: {
+                    newsfeed: {
+                        user_id: friend_userid,
+                    },
+                },
+            }
+        );
+        console.log(
+            `Removal of user #${friend_userid} from user #${outgoing_user_id}'s newsfeed complete; took ${
                 Date.now() - timestampStart
             }ms`
         );
@@ -178,9 +196,8 @@ const updateNewsfeed = async (req, res) => {
     res.sendStatus(200);
 };
 
-// needs a 'find index by key in array of object' function
+// after view
 const recalcNewsfeed = async (req, res) => {
-    const type = req.query.type;
     const userId = +req.query["user-id"];
     const timestampStart = Date.now();
     const readPostIds = req.body.posts;
@@ -229,4 +246,10 @@ const recalcNewsfeed = async (req, res) => {
     res.sendStatus(200);
 };
 
-module.exports = { createUser, getNewsfeed, updateNewsfeed, recalcNewsfeed };
+module.exports = {
+    createUser,
+    removeUserFromNewsfeed,
+    getNewsfeed,
+    updateNewsfeed,
+    recalcNewsfeed,
+};
