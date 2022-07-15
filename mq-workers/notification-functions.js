@@ -182,6 +182,9 @@ const pushNotification = async (args) => {
 
         // acceptor also receives notification
         if (args.type == 6) {
+            const { username: targetUsername, profile_pic_url: targetProfilePicUrl } = await getUserDataFromUserId(
+                for_user_id
+            );
             const newNotificationForOutgoing = new Notification({
                 type_id: args.type,
                 for_user_id: user_id,
@@ -191,9 +194,9 @@ const pushNotification = async (args) => {
                 await newNotificationForOutgoing.save();
             socket.emit("notification_event", {
                 notification_type_id: args.type,
-                username,
+                username: targetUsername,
                 inv_user_id: for_user_id,
-                profile_pic_url,
+                profile_pic_url: targetProfilePicUrl,
                 for_user_id: user_id,
                 id: notificationIdForOutgoing,
                 created_at: Date.now() / 1000,
