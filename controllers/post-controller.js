@@ -144,6 +144,10 @@ const deletePost = async (req, res) => {
 const getFeedDetail = async (req, res) => {
     const userId = req.user.id;
     const postId = +req.query["post-id"];
+    if (isNaN(postId)) {
+        res.send({ data: null });
+        return;
+    }
     let feedDetail = await Feed.getFeedDetail(postId, userId);
     res.send({ data: feedDetail });
 };

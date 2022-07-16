@@ -317,6 +317,10 @@ const getUserInfo = async (req, res) => {
         const [userPacket] = await User.find(["id"], {
             username: usernameInQuestion,
         });
+        if (!userPacket) {
+            res.send({});
+            return;
+        }
         const userInQuestion = userPacket.id;
 
         // res.send({user_info: "", profile_pic_url: req.user.profile_pic_url, friend_count: 0, recent_friends: []})
@@ -498,11 +502,10 @@ const userUnfriends = async (req, res) => {
 
     // call newsfeed generation service
     // newsfeed.post(`/user/unfriend?outgoing-user-id=${outgoing_user_id}&friend-user-id=${friend_userid}`);
-    newsfeed.post(
-        `/user/unfriend`, {
-            outgoing_user_id, friend_userid
-        }
-    );
+    newsfeed.post(`/user/unfriend`, {
+        outgoing_user_id,
+        friend_userid,
+    });
 
     // invalidate related notifications
     notificationDispatcherJobQueue.add({
