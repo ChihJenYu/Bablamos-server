@@ -188,16 +188,6 @@ const searchPosts = async (req, res) => {
     res.send({ data: resultsToReturn });
 };
 
-(async () => {
-    for (let i = 0; i < 50; i++) {
-        const randomPost = await Post.getRandomPost({
-            favor_recent: true,
-            favor_user: true,
-        });
-        console.log(randomPost);
-    }
-})();
-
 module.exports = {
     createPost,
     editPost,
