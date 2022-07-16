@@ -30,7 +30,14 @@ const randomUserSignup = async () => {
 
 const randomLikeOnPost = async () => {
     const randomUser = await User.getRandomUser();
-    const randomPost = await Post.getRandomPost({ favor: true });
+    const randomPost = await Post.getRandomPost({
+        favor_user: true,
+        favor_recent: true,
+    });
+    if (!randomPost) {
+        // favored users have not posted recently
+        return;
+    }
     const { token } = User.staticGenerateAuthToken(randomUser);
     await axios.post(
         `${MY_HOST}/user/like`,
@@ -139,12 +146,9 @@ const createRandomLikePost = schedule.scheduleJob(
     }
 );
 
-const createRandomLikeComment = schedule.scheduleJob(
-    "* * * * *",
-    async () => {
-        await randomLikeOnComment();
-    }
-);
+const createRandomLikeComment = schedule.scheduleJob("* * * * *", async () => {
+    await randomLikeOnComment();
+});
 
 const createRandomFriendRequest = schedule.scheduleJob(
     "*/15 * * * *",

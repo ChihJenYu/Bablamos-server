@@ -3,6 +3,8 @@ const Edge = require("./edge");
 const User = require("./user");
 // user_id mod me
 const POPULAR_CRITERIA = 100;
+const FAVOR_POPULAR_PROB = 0.7;
+const FAVOR_RECENT_PROB = 0.6;
 class Post extends Edge {
     constructor({
         id,
@@ -31,15 +33,23 @@ class Post extends Edge {
         this.tags = tags || [];
     }
 
-    static async getRandomPost({ favor }) {
-        if (!favor || (favor && Math.random() < 0.3)) {
-            const [randomPost] = await db.pool.query(
-                "SELECT * FROM post ORDER BY RAND() LIMIT 1"
-            );
-            return randomPost[0];
+    static async getRandomPost({ favor_user, favor_recent }) {
+        let userIdCondition = "";
+        let createdAtCondition = "";
+        if (favor_user && Math.random() > FAVOR_POPULAR_PROB) {
+            userIdCondition = `user_id % ${POPULAR_CRITERIA} = 0`;
+        }
+        if (favor_recent && Math.random() > FAVOR_RECENT_PROB) {
+            createdAtCondition = `created_at > NOW() - INTERVAL 24 hour`;
         }
         const [randomPost] = await db.pool.query(
-            "SELECT * FROM post WHERE user_id % 100 = 0 ORDER BY RAND() LIMIT 1"
+            `SELECT * FROM post ${
+                userIdCondition !== "" || createdAtCondition !== ""
+                    ? "WHERE"
+                    : ""
+            } ${userIdCondition} ${
+                userIdCondition !== "" && createdAtCondition !== "" ? "AND" : ""
+            } ${createdAtCondition} ORDER BY RAND() LIMIT 1`
         );
         return randomPost[0];
     }

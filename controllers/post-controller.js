@@ -1,6 +1,5 @@
 const Post = require("../models/post");
 const Feed = require("../models/feed");
-const User = require("../models/user");
 const { ELASTIC_POST_INDEX } = process.env;
 const SEARCH_POST_PAGE_SIZE = 8;
 const newsfeed = require("../apis/newsfeed");
@@ -188,6 +187,16 @@ const searchPosts = async (req, res) => {
     }
     res.send({ data: resultsToReturn });
 };
+
+(async () => {
+    for (let i = 0; i < 50; i++) {
+        const randomPost = await Post.getRandomPost({
+            favor_recent: true,
+            favor_user: true,
+        });
+        console.log(randomPost);
+    }
+})();
 
 module.exports = {
     createPost,
