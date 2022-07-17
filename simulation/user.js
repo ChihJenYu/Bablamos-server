@@ -150,12 +150,12 @@ const createRandomLikeComment = schedule.scheduleJob("* * * * *", async () => {
     await randomLikeOnComment();
 });
 
-const createRandomFriendRequest = schedule.scheduleJob(
-    "*/15 * * * *",
-    async () => {
-        await randomSendFriendRequest();
-    }
-);
+// const createRandomFriendRequest = schedule.scheduleJob(
+//     "*/15 * * * *",
+//     async () => {
+//         await randomSendFriendRequest();
+//     }
+// );
 
 const createRandomFriend = schedule.scheduleJob("*/15 * * * *", async () => {
     await randomAcceptFriendRequest();

@@ -4,7 +4,7 @@ const User = require("./user");
 // user_id mod me
 const POPULAR_CRITERIA = 100;
 const FAVOR_POPULAR_PROB = 0.7;
-const FAVOR_RECENT_PROB = 0.6;
+const FAVOR_RECENT_PROB = 0.8;
 class Post extends Edge {
     constructor({
         id,
