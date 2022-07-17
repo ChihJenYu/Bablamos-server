@@ -391,7 +391,7 @@ const checkPopCount = async ({ post_id, type }) => {
 
     if (type == "like") {
         pop_count = data.like_count;
-        if (pop_count % 10 !== 0) {
+        if (pop_count % 10 !== 0 || pop_count === 0) {
             console.log(`Does not warrant popularity calculation; exiting...`);
             return;
         }
@@ -411,7 +411,7 @@ const checkPopCount = async ({ post_id, type }) => {
         );
     } else if (type == "comment") {
         pop_count = data.comment_count;
-        if (pop_count % 7 !== 0) {
+        if (pop_count % 7 !== 0 || pop_count === 0) {
             console.log(`Does not warrant popularity calculation; exiting...`);
             return;
         }
@@ -431,7 +431,7 @@ const checkPopCount = async ({ post_id, type }) => {
         );
     } else {
         pop_count = data.share_count;
-        if (pop_count % 5 !== 0) {
+        if (pop_count % 5 !== 0 || pop_count === 0) {
             console.log(`Does not warrant popularity calculation; exiting...`);
             return;
         }

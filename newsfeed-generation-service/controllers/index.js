@@ -216,7 +216,7 @@ const recalcNewsfeed = async (req, res) => {
                     "newsfeed.$.views": 1,
                 },
                 $mul: {
-                    "newsfeed.$.edge_rank_score": 1 / ALREADY_SEEN_BASE,
+                    "newsfeed.$.edge_rank_score": 1 / +ALREADY_SEEN_BASE,
                 },
                 $set: {
                     "newsfeed.$.is_new": false,
