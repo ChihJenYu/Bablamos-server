@@ -51,6 +51,7 @@ const updatePopularity = {
                                             "$$n.share_score",
                                         ],
                                     },
+                                    "$$n.fresh_pop_buff",
                                 ],
                             },
                         },

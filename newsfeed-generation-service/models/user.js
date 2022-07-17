@@ -30,6 +30,10 @@ const UserSchema = mongoose.Schema({
                 type: Number,
                 default: 0,
             },
+            fresh_pop_buff: {
+                type: Number,
+                default: 0,
+            },
             popularity: {
                 type: Number,
                 default: 0,

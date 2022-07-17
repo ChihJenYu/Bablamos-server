@@ -135,6 +135,7 @@ const updateNewsfeed = async (req, res) => {
                                             like_score: 0,
                                             comment_score: 0,
                                             share_score: 0,
+                                            fresh_pop_buff: +FRESH_POP_BUFF,
                                             // popularity buff for new posts
                                             popularity: +FRESH_POP_BUFF,
                                             time_decay_factor:
@@ -221,6 +222,9 @@ const recalcNewsfeed = async (req, res) => {
                 $set: {
                     "newsfeed.$.is_new": false,
                 },
+                $set: {
+                    "newsfeed.$.fresh_pop_buff": 0
+                }
             }
         );
     }
