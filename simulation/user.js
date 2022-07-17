@@ -162,7 +162,7 @@ const createRandomFriend = schedule.scheduleJob("*/15 * * * *", async () => {
 });
 
 const createRandomUserProfilePhoto = schedule.scheduleJob(
-    "*/30 * * * *",
+    "0 * * * *",
     async () => {
         await randomEditUserProfilePhoto();
     }

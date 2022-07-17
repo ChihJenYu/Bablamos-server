@@ -586,6 +586,79 @@ const readPost = (req, res) => {
     }
 };
 
+const testGetNewsfeed = async (req, res) => {
+    const paging = +req.query.paging || 0;
+    const userAsking = req.params.user_id;
+    // initialization
+    if (!userTempNewsfeedStorage[userAsking] || paging === 0) {
+        userTempNewsfeedStorage[userAsking] = [];
+        await redisClient.set(
+            "NFGS_start_index_for_temp_storage_user_" + userAsking,
+            0
+        );
+    }
+
+    const requestedStartIndex = paging * NEWSFEED_PER_PAGE_FOR_CLIENT;
+    const requestedEndIndex =
+        paging * NEWSFEED_PER_PAGE_FOR_CLIENT +
+        NEWSFEED_PER_PAGE_FOR_CLIENT -
+        1;
+
+    let NFGSStartIndex = await redisClient.get(
+        "NFGS_start_index_for_temp_storage_user_" + userAsking
+    );
+    NFGSStartIndex = +NFGSStartIndex;
+    NFGSEndIndex = NFGSStartIndex + NEWSFEED_PER_PAGE_FOR_WEB_SERVER - 1;
+
+    // issue: localIndex could be negative
+    const localIndexToStart = requestedStartIndex - NFGSStartIndex;
+    const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
+    let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
+        localIndexToStart,
+        localIndexToEnd + 1
+    );
+
+    // not within range
+    if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
+        const { data } = await newsfeed.get(
+            `?user-id=${userAsking}&from=${requestedStartIndex}`
+        );
+
+        userTempNewsfeedStorage[userAsking] = data.data;
+        newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
+            0,
+            NEWSFEED_PER_PAGE_FOR_CLIENT
+        );
+        redisClient.set(
+            "NFGS_start_index_for_temp_storage_user_" + userAsking,
+            requestedStartIndex
+        );
+    } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
+    } else {
+        const { data } = await newsfeed.get(
+            `?user-id=${userAsking}&from=${requestedStartIndex}`
+        );
+
+        userTempNewsfeedStorage[userAsking] = data.data;
+        newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
+        redisClient.set(
+            "NFGS_start_index_for_temp_storage_user_" + userAsking,
+            requestedStartIndex
+        );
+    }
+
+    // add author profile_pic_url and commentor
+    for (let i = 0; i < newsfeedToReturn.length; i++) {
+        const feedId = newsfeedToReturn[i].post_id;
+        const feedContent = await Feed.getFeedDetail(feedId, userAsking);
+        if (!feedContent) {
+            continue;
+        }
+        newsfeedToReturn[i] = feedContent;
+    }
+    res.send({ data: newsfeedToReturn });
+};
+
 module.exports = {
     userSignUp,
     userSignIn,
@@ -604,4 +677,5 @@ module.exports = {
     getUserFollowers,
     dropFollowers,
     readPost,
+    testGetNewsfeed,
 };

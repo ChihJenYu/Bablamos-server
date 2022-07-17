@@ -20,6 +20,7 @@ const {
     dropFollowers,
     getUserFollowings,
     readPost,
+    testGetNewsfeed,
 } = require("../controllers/user-controller");
 // const { multerMiddleware } = require("../utils/util");
 // const { editUserInfo } = require("../../bablamos-client/src/apis/user");
@@ -41,6 +42,8 @@ router
 router
     .route("/user/newsfeed")
     .get([authentication, asyncErrorHandler(getNewsfeed)]);
+
+router.route("/user/newsfeed-test/:user_id").get(asyncErrorHandler(testGetNewsfeed));
 
 router
     .route("/user/info")
