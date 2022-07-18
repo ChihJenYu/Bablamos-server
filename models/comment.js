@@ -1,6 +1,5 @@
 const db = require("../mysql");
 const Edge = require("./edge");
-
 class Comment extends Edge {
     constructor({
         id,
@@ -37,9 +36,31 @@ class Comment extends Edge {
         return photoUrls;
     }
 
+    static async getRandomComment() {
+        const [randomComment] = await db.pool.query(
+            "SELECT * FROM comment ORDER BY RAND() LIMIT 1"
+        );
+        return randomComment[0];
+    }
+
     static async delete(id) {
-        await db.pool.query(`DELETE FROM comment WHERE id = ?`, [id]);
-        return true;
+        const conn = await db.pool.getConnection();
+        try {
+            await conn.query("START TRANSACTION");
+            let [responseObject] = await conn.query(
+                "SELECT * FROM comment WHERE id = ?",
+                [id]
+            );
+            await db.pool.query(`DELETE FROM comment WHERE id = ?`, [id]);
+            await conn.query("COMMIT");
+            return responseObject[0];
+        } catch (error) {
+            await conn.query("ROLLBACK");
+            console.log(error);
+            return false;
+        } finally {
+            await conn.release();
+        }
     }
 
     async save() {
@@ -48,7 +69,7 @@ class Comment extends Edge {
             await conn.query("START TRANSACTION");
             if (this.id) {
                 // update
-                const postMentionsArray = this.mentioned_users.map(
+                const commentMentionsArray = this.mentioned_users.map(
                     (user_id) => {
                         return [this.id, user_id];
                     }
@@ -59,17 +80,20 @@ class Comment extends Edge {
                     [this.content, this.photo_count, this.id]
                 );
 
-                await conn.query(
-                    `DELETE FROM mention_user WHERE comment_id = ?; INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
-                    [this.id, postMentionsArray]
-                );
+                if (commentMentionsArray.length !== 0) {
+                    await conn.query(
+                        `DELETE FROM mention_user WHERE comment_id = ?; INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
+                        [this.id, commentMentionsArray]
+                    );
+                }
+
                 await conn.query("COMMIT");
                 return true;
             } else {
                 const [{ insertId: comment_id }] = await conn.query(
                     `INSERT INTO comment
             (post_id, user_id, content, photo_count, level, replied_comment_id)
-            VALUES (?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?)`,
                     [
                         this.post_id,
                         this.user_id,
@@ -91,16 +115,18 @@ class Comment extends Edge {
                 this.id = id;
                 this.created_at = created_at;
 
-                const postMentionsArray = this.mentioned_users.map(
+                const commentMentionsArray = this.mentioned_users.map(
                     (user_id) => {
                         return [this.id, user_id];
                     }
                 );
 
-                await conn.query(
-                    `INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
-                    [postMentionsArray]
-                );
+                if (commentMentionsArray.length !== 0) {
+                    await conn.query(
+                        `INSERT INTO mention_user (comment_id, user_id) VALUES ?`,
+                        [commentMentionsArray]
+                    );
+                }
 
                 // commit transaction
                 await conn.query("COMMIT");
@@ -115,13 +141,35 @@ class Comment extends Edge {
         }
     }
 
-    static async find(cols, filter, fat = false) {
+    static async find(cols, filter) {
         const colsClause = db.translateCols(cols);
         let query;
         const { whereClause, args } = db.translateFilter(filter);
         query = `select ${colsClause} from comment ${whereClause}`;
         const [result] = await db.pool.query(query, args);
         return result;
+    }
+
+    // with next_paging
+    static async getComments({ post_id, paging, page_size, user_asking }) {
+        let [comments] = await db.pool.query(
+            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
+            sum(
+                case when lu.user_id is null then 0 else 1 end
+            ) as like_count, case when
+                al.comment_id is null
+                then 0
+                else 1
+                end as already_liked
+            from comment c join user u on c.user_id = u.id
+            left join like_user lu on c.id = lu.comment_id
+            left join (
+                        select comment_id from like_user where user_id = ?
+                    ) as al on c.id = al.comment_id
+            where c.post_id = ? group by c.id order by c.created_at desc limit ?, ?`,
+            [user_asking, post_id, paging * page_size, page_size + 1]
+        );
+        return comments;
     }
 }
 

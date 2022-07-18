@@ -1,126 +1,259 @@
-const redisClient = require("../redis");
-const { Feed } = require("../utils/feed");
-const {
-    getUserIds,
-    calculateAffinity,
-    calculateEdgeWeight,
-    calcTimeDecayFactor,
-    calcEdgeRankScore,
-} = require("../models");
+const { getUserIds } = require("../models");
+const { FRESH_POP_BUFF, TEN_MINUTE_TIME_DECAY, ALREADY_SEEN_BASE } =
+    process.env;
+const User = require("../models/user");
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 
-const getNewsfeed = async (req, res) => {
-    const whichPage = req.query.at;
+const createUser = async (req, res) => {
     const userId = req.query["user-id"];
-    const paging = req.query.paging;
-    const newsfeed = await redisClient.LRANGE(
-        "" + userId,
-        NEWSFEED_PER_PAGE_FOR_WEB_SERVER * paging, // starting index
-        NEWSFEED_PER_PAGE_FOR_WEB_SERVER * paging +
-            NEWSFEED_PER_PAGE_FOR_WEB_SERVER -
-            1 // ending index (incl.)
+    const timestampStart = Date.now();
+    try {
+        const newUser = new User({
+            user_id: +userId,
+            newsfeed: [],
+            affinity: [],
+            affinity_with_self: [],
+        });
+        await newUser.save();
+        console.log(
+            `Insertion of user #${userId} complete; took ${
+                Date.now() - timestampStart
+            }ms`
+        );
+    } catch (e) {
+        console.log(e);
+    }
+};
+
+const removeUserFromNewsfeed = async (req, res) => {
+    const { outgoing_user_id, friend_userid } = req.body;
+    const timestampStart = Date.now();
+    try {
+        await User.updateOne(
+            { user_id: outgoing_user_id },
+            {
+                $pull: {
+                    newsfeed: {
+                        user_id: friend_userid,
+                    },
+                },
+            }
+        );
+        console.log(
+            `Removal of user #${friend_userid} from user #${outgoing_user_id}'s newsfeed complete; took ${
+                Date.now() - timestampStart
+            }ms`
+        );
+    } catch (e) {
+        console.log(e);
+    }
+};
+
+const getNewsfeed = async (req, res) => {
+    const userId = +req.query["user-id"];
+    const from = +req.query.from;
+    const user = await User.findOne(
+        { user_id: userId },
+        {
+            newsfeed: {
+                $slice: [from, NEWSFEED_PER_PAGE_FOR_WEB_SERVER],
+            },
+            affinity: 0,
+        }
     );
-    const newsfeedParsed = newsfeed.map((feed) => JSON.parse(feed));
-    res.send({ data: newsfeedParsed });
+    if (!user) {
+        res.send({ data: [] });
+        return;
+    }
+    const newsfeed = user.newsfeed.map((nf) => {
+        return { post_id: nf.post_id };
+    });
+    res.send({ data: newsfeed });
 };
 
 const updateNewsfeed = async (req, res) => {
     const method = req.query.method;
-    const userId = req.query["user-id"];
+    const userId = +req.query["user-id"];
+    const postId = +req.query["post-id"];
+    const createdAt = req.query["created-at"];
     const httpMethod = req.method;
-    const newFeed = new Feed(req.body);
 
     if (method === "write") {
-        // [{id: 1}, {id: 2}, ...]
-        const followerIds = await getUserIds({
+        let followerIds = await getUserIds({
             type: "get_followers",
             user_id: userId,
         });
 
+        followerIds = followerIds.map((id) => id.id);
+
+        // push fresh feed to followers
         if (httpMethod === "POST") {
-            console.log(
-                "New feed to insert into followers' news feed: ",
-                newFeed
+            const timestampStart = Date.now();
+
+            let affinityWithSelf = {};
+            // get affinity_with_self from redis
+            // const affinityWithSelfJSON = await redisClient.get(
+            //     `affinity_with_self_user_${userId}`
+            // );
+            // if (affinityWithSelfJSON) {
+            //     affinityWithSelf = JSON.parse(affinityWithSelfJSON);
+            // } else {
+            // if not exist, get from mongo
+            const posterObj = await User.findOne(
+                { user_id: userId },
+                { affinity_with_self: 1 }
             );
 
-            // calculate time decay factor of the new feed
-            // const timeDecayFactor = calcTimeDecayFactor(newFeed);
+            if (posterObj) {
+                posterObj.affinity_with_self.forEach((user) => {
+                    affinityWithSelf[user.user_id] = user.affinity_with_self;
+                });
+                // write affinity_with_self to redis
+                // redisClient.set(
+                //     `affinity_with_self_user_${userId}`,
+                //     JSON.stringify(affinityWithSelf)
+                // );
+            }
+            // }
+            const bulkWrites = [];
+            for (let followerId of followerIds) {
+                bulkWrites.push({
+                    updateOne: {
+                        filter: {
+                            user_id: followerId,
+                        },
+                        update: {
+                            $push: {
+                                newsfeed: {
+                                    $each: [
+                                        {
+                                            post_id: postId,
+                                            user_id: userId,
+                                            affinity:
+                                                affinityWithSelf[followerId] ||
+                                                0,
+                                            like_score: 0,
+                                            comment_score: 0,
+                                            share_score: 0,
+                                            fresh_pop_buff: +FRESH_POP_BUFF,
+                                            // popularity buff for new posts
+                                            popularity: +FRESH_POP_BUFF,
+                                            time_decay_factor:
+                                                +TEN_MINUTE_TIME_DECAY,
+                                            created_at: createdAt,
+                                            views: 0,
+                                            edge_rank_score:
+                                                ((1 +
+                                                    (affinityWithSelf[
+                                                        followerId
+                                                    ] || 0)) *
+                                                    +FRESH_POP_BUFF) /
+                                                +TEN_MINUTE_TIME_DECAY,
+                                            is_new: true,
+                                        },
+                                    ],
+                                    $sort: {
+                                        edge_rank_score: -1,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            }
 
-            // for each follower
-            for (let i = 0; i < followerIds.length; i++) {
-                const followerId = followerIds[i].id;
-                await redisClient.LPUSH("" + followerId, JSON.stringify(newFeed));
-                // calculate edge rank score of the new feed for each follower
-                // const affinity = await calculateAffinity(followerId, userId);
-                // const edgeWeight = await calculateEdgeWeight(
-                //     newFeed,
-                //     followerId,
-                //     newFeed.id
-                // );
-                // const edgeRankScore = calcEdgeRankScore(
-                //     affinity,
-                //     edgeWeight,
-                //     timeDecayFactor
-                // );
-                // newFeed.edge_rank_score = edgeRankScore;
-                // const followerNewsfeed = await redisClient.LRANGE(
-                //     "" + followerId,
-                //     0,
-                //     -1
-                // );
+            await User.bulkWrite(bulkWrites);
 
-                // let followerNewsfeedParsed = followerNewsfeed.map((feed) =>
-                //     JSON.parse(feed)
-                // );
-                // followerNewsfeedParsed.push(newFeed);
-                // followerNewsfeedParsed.sort(
-                //     (item1, item2) =>
-                //         item2.edge_rank_score - item1.edge_rank_score
-                // );
-                // await redisClient.DEL("" + followerId);
-                // for (let i = 0; i < followerNewsfeedParsed.length; i++) {
-                //     await redisClient.RPUSH(
-                //         "" + followerId,
-                //         JSON.stringify(followerNewsfeedParsed[i])
-                //     );
-                // }
-            }
-            console.log("Cache ready.");
-        } else if (httpMethod === "PATCH") {
-            for (let i = 0; i < followerIds.length; i++) {
-                const followerId = followerIds[i].id;
-                const followerNewsfeed = await redisClient.LRANGE(
-                    "" + followerId,
-                    0,
-                    -1
-                );
-                let followerNewsfeedParsed = followerNewsfeed.map((feed) =>
-                    JSON.parse(feed)
-                );
-                const positionOfFeedToUpdate = followerNewsfeedParsed
-                    .map((el) => el.id)
-                    .indexOf(newFeed.id);
-                followerNewsfeedParsed[positionOfFeedToUpdate] = newFeed;
-                await redisClient.LSET(
-                    "" + followerId,
-                    positionOfFeedToUpdate,
-                    JSON.stringify(newFeed)
-                );
-            }
-            console.log("Cache ready.");
-        } else if (httpMethod === "DELETE") {
-            for (let i = 0; i < followerIds.length; i++) {
-                const followerId = followerIds[i].id;
-                await redisClient.LREM(
-                    "" + followerId,
-                    0,
-                    JSON.stringify(newFeed)
-                );
-            }
-            console.log("Cache ready.");
+            console.log(
+                `Push of post #${postId} to followers newsfeed complete; took ${
+                    Date.now() - timestampStart
+                }ms`
+            );
+        }
+        // pull feed from newsfeed
+        else if (httpMethod === "DELETE") {
+            const timestampStart = Date.now();
+            await User.updateMany(
+                {
+                    user_id: {
+                        $in: followerIds,
+                    },
+                },
+                {
+                    $pull: {
+                        newsfeed: {
+                            post_id: postId,
+                        },
+                    },
+                }
+            );
+            console.log(
+                `Removal of post #${postId} from followers newsfeed complete; took ${
+                    Date.now() - timestampStart
+                }ms`
+            );
         }
     }
     res.sendStatus(200);
 };
 
-module.exports = { getNewsfeed, updateNewsfeed };
+// after view
+const recalcNewsfeed = async (req, res) => {
+    const userId = +req.query["user-id"];
+    const timestampStart = Date.now();
+    const readPostIds = req.body.posts;
+    console.log("Read posts: ", readPostIds);
+    // increment view counts in Mongo
+    if (readPostIds.length === 0) {
+        res.sendStatus(200);
+        return;
+    }
+    for (let readPost of readPostIds) {
+        // increment view count and decrease edge rank score
+        await User.updateOne(
+            { user_id: userId, "newsfeed.post_id": readPost },
+            {
+                $inc: {
+                    "newsfeed.$.views": 1,
+                },
+                $mul: {
+                    "newsfeed.$.edge_rank_score": 1 / +ALREADY_SEEN_BASE,
+                },
+                $set: {
+                    "newsfeed.$.is_new": false,
+                },
+                $set: {
+                    "newsfeed.$.fresh_pop_buff": 0
+                }
+            }
+        );
+    }
+
+    // reorder
+    await User.updateOne(
+        { user_id: userId },
+        {
+            $push: {
+                newsfeed: {
+                    $each: [],
+                    $sort: {
+                        edge_rank_score: -1,
+                    },
+                },
+            },
+        }
+    );
+
+    console.log(
+        `View count update complete; took ${Date.now() - timestampStart}ms`
+    );
+    res.sendStatus(200);
+};
+
+module.exports = {
+    createUser,
+    removeUserFromNewsfeed,
+    getNewsfeed,
+    updateNewsfeed,
+    recalcNewsfeed,
+};

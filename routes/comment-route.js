@@ -5,10 +5,12 @@ const {
     createComment,
     editComment,
     deleteComment,
+    getComments,
 } = require("../controllers/comment-controller");
 
 router
     .route("/comment")
+    .get([authentication, asyncErrorHandler(getComments)])
     .post([authentication, asyncErrorHandler(createComment)])
     .patch([authentication, commentEditAccess, asyncErrorHandler(editComment)])
     .delete([

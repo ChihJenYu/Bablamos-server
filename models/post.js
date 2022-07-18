@@ -1,6 +1,10 @@
 const db = require("../mysql");
 const Edge = require("./edge");
-
+const User = require("./user");
+// user_id mod me
+const POPULAR_CRITERIA = 100;
+const FAVOR_POPULAR_PROB = 0.2;
+const FAVOR_RECENT_PROB = 0.8;
 class Post extends Edge {
     constructor({
         id,
@@ -29,12 +33,25 @@ class Post extends Edge {
         this.tags = tags || [];
     }
 
-    generatePhotoUrls() {
-        let photoUrls = [];
-        for (let i = 0; i < this.photo_count; i++) {
-            photoUrls.push(`/user-media/${this.id}/${i}.jpg`);
+    static async getRandomPost({ favor_user, favor_recent }) {
+        let userIdCondition = "";
+        let createdAtCondition = "";
+        if (favor_user && Math.random() < FAVOR_POPULAR_PROB) {
+            userIdCondition = `user_id % ${POPULAR_CRITERIA} = 0`;
         }
-        return photoUrls;
+        if (favor_recent && Math.random() < FAVOR_RECENT_PROB) {
+            createdAtCondition = `created_at > NOW() - INTERVAL 24 hour`;
+        }
+        const [randomPost] = await db.pool.query(
+            `SELECT * FROM post ${
+                userIdCondition !== "" || createdAtCondition !== ""
+                    ? "WHERE"
+                    : ""
+            } ${userIdCondition} ${
+                userIdCondition !== "" && createdAtCondition !== "" ? "AND" : ""
+            } ${createdAtCondition} ORDER BY RAND() LIMIT 1`
+        );
+        return randomPost[0];
     }
 
     static staticGeneratePhotoUrls(id, photo_count) {
@@ -46,14 +63,30 @@ class Post extends Edge {
     }
 
     static async delete(id) {
-        await db.pool.query(`DELETE FROM post WHERE id = ?`, [id]);
-        return true;
+        const conn = await db.pool.getConnection();
+        try {
+            await conn.query("START TRANSACTION");
+            let [responseObject] = await conn.query(
+                "SELECT * FROM post WHERE id = ?",
+                [id]
+            );
+            await conn.query(`DELETE FROM post WHERE id = ?`, [id]);
+            await conn.query("COMMIT");
+            return responseObject[0];
+        } catch (error) {
+            await conn.query("ROLLBACK");
+            console.log(error);
+            return false;
+        } finally {
+            await conn.release();
+        }
     }
 
     async save() {
         const conn = await db.pool.getConnection();
         try {
             await conn.query("START TRANSACTION");
+
             if (this.id) {
                 const postTagsArray = this.tags.map((tag) => {
                     return [this.id, tag.tag_id];
@@ -74,29 +107,40 @@ class Post extends Edge {
                         this.content,
                         this.audience_type_id,
                         this.shared_post_id,
-                        this.id,
                         this.photo_count,
+                        this.id,
                     ]
                 );
+
                 // update post_tag
+                await conn.query("DELETE FROM post_tag WHERE post_id = ?", [
+                    this.id,
+                ]);
                 if (postTagsArray.length > 0) {
                     await conn.query(
-                        "DELETE FROM post_tag WHERE post_id = ?; INSERT INTO post_tag (post_id, tag_id) VALUES ?",
-                        [this.id, postTagsArray]
+                        "INSERT INTO post_tag (post_id, tag_id) VALUES ?",
+                        [postTagsArray]
                     );
                 }
                 // update post_audience_list
+                await conn.query(
+                    "DELETE FROM post_audience_list WHERE post_id = ?",
+                    [this.id]
+                );
                 if (postAudienceArray.length > 0) {
                     await conn.query(
-                        "DELETE FROM post_audience_list WHERE post_id = ?; INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
-                        [this.id, postAudienceArray]
+                        "INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
+                        [postAudienceArray]
                     );
                 }
                 // update mention_user table
+                await conn.query("DELETE FROM mention_user WHERE post_id = ?", [
+                    this.id,
+                ]);
                 if (postMentionsArray.length > 0) {
                     await conn.query(
-                        "DELETE FROM mention_user WHERE post_id = ?; INSERT INTO mention_user (post_id, user_id) VALUES ?",
-                        [this.id, postMentionsArray]
+                        "INSERT INTO mention_user (post_id, user_id) VALUES ?",
+                        [postMentionsArray]
                     );
                 }
             } else {
@@ -178,6 +222,37 @@ class Post extends Edge {
         query = `select ${colsClause} from post ${whereClause}`;
         const [result] = await db.pool.query(query, args);
         return result;
+    }
+
+    static async getSharedData(post_id) {
+        const [
+            {
+                user_id: shared_post_user_id,
+                content: shared_post_content,
+                created_at: shared_post_created_at,
+            },
+        ] = await Post.find(["user_id", "content", "created_at"], {
+            id: post_id,
+        });
+        const [
+            {
+                username: shared_post_username,
+                user_profile_pic: shared_post_user_profile_pic,
+            },
+        ] = await User.find(["username", "user_profile_pic"], {
+            id: shared_post_user_id,
+        });
+        return {
+            id: post_id,
+            user_id: shared_post_user_id,
+            content: shared_post_content,
+            created_at: shared_post_created_at,
+            username: shared_post_username,
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: shared_post_user_profile_pic == 1,
+                id: shared_post_user_id,
+            }),
+        };
     }
 }
 
