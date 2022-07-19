@@ -43,8 +43,6 @@ router
     .route("/user/newsfeed")
     .get([authentication, asyncErrorHandler(getNewsfeed)]);
 
-router.route("/user/newsfeed-test/:user_id").get(asyncErrorHandler(testGetNewsfeed));
-
 router
     .route("/user/info")
     .get([authentication, asyncErrorHandler(getUserInfo)])

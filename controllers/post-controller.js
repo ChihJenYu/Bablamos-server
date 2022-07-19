@@ -2,6 +2,7 @@ const Post = require("../models/post");
 const Feed = require("../models/feed");
 const { ELASTIC_POST_INDEX } = process.env;
 const SEARCH_POST_PAGE_SIZE = 8;
+const UPDATE_METHOD = "write";
 const newsfeed = require("../apis/newsfeed");
 const search = require("../apis/search");
 const {
@@ -9,17 +10,7 @@ const {
     notificationDispatcherJobQueue,
 } = require("../mq/");
 const createPost = async (req, res) => {
-    // request body:
-    // {
-    //     content: "Lorem ipsum",
-    //     audience_type_id: 1, // public
-    //     audience: undefined,
-    //     shared_post_id: undefined,
-    //     tags: [{tag_id: 1, tag_name: 'nodejs'}],
-    //     mentioned_users: undefined,
-    //     photo_count: number
-    // }
-    const photo_count = req.files ? req.files.length : 0;
+    const photo_count = req.files?.length || 0;
     const { id: user_id } = req.user;
     const postData = req.body;
     const newPost = new Post({ ...postData, user_id, photo_count });
@@ -30,11 +21,6 @@ const createPost = async (req, res) => {
 
     // fan-out write
     // call NFGS to update all newsfeeds of all followers of this user
-    console.log(
-        "New post saved in database; Calling newsfeed generation service..."
-    );
-    const UPDATE_METHOD = "write";
-
     newsfeed.post(
         `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${
             newPost.id
@@ -51,7 +37,6 @@ const createPost = async (req, res) => {
         });
 
         // publish notification to shared_post_user
-        console.log("Calling notification service...");
         notificationDispatcherJobQueue.add({
             function: "pushNotification",
             type: 7,

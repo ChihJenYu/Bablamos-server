@@ -9,14 +9,7 @@ const {
 const createComment = async (req, res) => {
     const post_id = req.query["post-id"];
     const user_id = req.user.id;
-    // request body:
-    // {
-    //     content: "lorem ipsum",
-    //     level: 1,
-    //     replied_comment_id: undefined,
-    //     mentioned_users: [1, 2, 3],
-    // }
-    const photo_count = req.files ? req.files.length : 0;
+    const photo_count = req.files?.length || 0;
     const commentData = req.body;
     const newComment = new Comment({
         ...commentData,
@@ -70,15 +63,7 @@ const editComment = async (req, res) => {
     const photo_count = req.files.length;
     const comment_id = req.comment_id;
     const user_id = req.user.id;
-    // request query: comment-id
-    // request body:
-    // {
-    //     content: "lorem ipsum",
-    //     created_at,
-    //     mentioned_users: [1, 2, 3],
-    // }
     const commentData = req.body;
-
     const newComment = new Comment({
         ...commentData,
         user_id,
@@ -106,9 +91,6 @@ const deleteComment = async (req, res) => {
         post_id: "" + post_id,
         type: "comment",
     });
-    const [{ user_id: for_user_id }] = await Post.find(["user_id"], {
-        id: post_id,
-    });
 };
 
 const getComments = async (req, res) => {
@@ -132,9 +114,8 @@ const getComments = async (req, res) => {
         };
     });
 
-    let next_paging;
     if (comments.length > COMMENT_PAGE_SIZE) {
-        next_paging = paging + 1;
+        const next_paging = paging + 1;
         res.send({
             data: {
                 comments: commentsToReturn.slice(0, comments.length - 1),

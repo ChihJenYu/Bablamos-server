@@ -394,23 +394,6 @@ class User {
         return result;
     }
 
-    // { type: "all", user_id_to_drop: undefined }
-    // { type: "specific", user_id_to_drop: array }
-    static async dropFollowers({ id, type, user_id_to_drop }) {
-        if (type === "all") {
-            await db.pool.query(
-                `DELETE FROM followship WHERE following_userid = ?`,
-                [id]
-            );
-        } else if (type === "specific") {
-            await db.pool.query(
-                `DELETE FROM followship WHERE following_userid = ? AND user_id in ?`,
-                [id, user_id_to_drop]
-            );
-        }
-        return true;
-    }
-
     static async like({ type, user_id, post_id, comment_id }) {
         const edgeType = post_id ? "post" : "comment";
         const edge_id = post_id ? post_id : comment_id;

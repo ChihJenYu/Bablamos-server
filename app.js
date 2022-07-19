@@ -6,20 +6,6 @@ const cors = require("cors");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// rate limiter
-// app.use(async (req, res, next) => {
-//     // in ms
-//     try {
-//         const clientIP = req.socket.remoteAddress;
-//         await tryAppendToCache(clientIP);
-//         next();
-//     } catch (e) {
-//         // console.log(e);
-//         if (e.message === "Too many requests") {
-//             res.status(429).send({ error: e.message });
-//         }
-//     }
-// });
 app.use(cors());
 app.use("/api", [
     require("./routes/post-route"),
