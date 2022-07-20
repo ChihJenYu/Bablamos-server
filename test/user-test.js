@@ -176,7 +176,7 @@ describe("User", () => {
             .set("Authorization", access_token);
 
         const userNewsfeed = newsfeedResponse.body.data;
-        expect(userNewsfeed).to.be.an("array");
+        expect(userNewsfeed).to.have.lengthOf(2);
         expect(userNewsfeed[0]).to.have.all.keys([
             "id",
             "edge_type_id",
