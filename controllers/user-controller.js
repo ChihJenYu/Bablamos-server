@@ -54,7 +54,7 @@ const insertNewUser = async (includeProfilePic, type, userData) => {
 const regularSignin = async (type, userData) => {
     const retrievedUser = await User.findByCredentials(userData);
     if (!retrievedUser) {
-        throw new Error("User not found");
+        throw new Error("Incorrect credentials");
     }
     const { id, username, email, user_profile_pic } = retrievedUser;
     const token = User.staticGenerateAuthToken(retrievedUser);
@@ -73,7 +73,7 @@ const regularSignin = async (type, userData) => {
     };
 };
 
-const userSignUp = async (req, res) => {
+const userSignUp = async (req, res, next) => {
     try {
         if (req.file) {
             // includes profile picture
@@ -92,23 +92,32 @@ const userSignUp = async (req, res) => {
             });
             res.status(201).send(responseBody);
             newsfeed.post(`/user?user-id=${responseBody.user.id}`);
-        } else {
-            // no profile picture
-            const responseBody = await insertNewUser(false, "native", req.body);
-            responseBody.user.profile_pic_url = User.generatePictureUrl({
-                has_profile: false,
-            });
-            res.status(201).send(responseBody);
-            newsfeed.post(`/user?user-id=${responseBody.user.id}`);
+            return;
         }
-    } catch (e) {
-        console.log(e);
-        res.status(400).send({ error: e.message });
+        // no profile picture
+        const responseBody = await insertNewUser(false, "native", req.body);
+        responseBody.user.profile_pic_url = User.generatePictureUrl({
+            has_profile: false,
+        });
+        res.status(201).send(responseBody);
+        newsfeed.post(`/user?user-id=${responseBody.user.id}`);
         return;
+    } catch (e) {
+        if (e.message === "Missing information") {
+            res.status(400).send({ error: e.message });
+            return;
+        }
+        if (e.message.includes("Duplicate entry")) {
+            res.status(400).send({
+                error: "Username or email is already used",
+            });
+            return;
+        }
+        next(e);
     }
 };
 
-const userSignIn = async (req, res) => {
+const userSignIn = async (req, res, next) => {
     if (!req.is("application/json")) {
         res.status(400).send({ error: "Wrong content type" });
         return;
@@ -118,9 +127,11 @@ const userSignIn = async (req, res) => {
         res.status(200).send(responseBody);
         return;
     } catch (e) {
-        console.log(e);
-        res.status(400).send({ error: e.message });
-        return;
+        if (e.message === "Incorrect credentials") {
+            res.status(403).send({ error: e.message });
+            return;
+        }
+        next(e);
     }
 };
 
@@ -197,7 +208,7 @@ const editUserProfile = async (req, res) => {
 };
 
 // /user/newsfeed?at=index&paging=0&username= (username query is required if at == profile)
-// returns an array of parsed Feed objects
+// returns an array of Feed objects
 const getNewsfeed = async (req, res) => {
     const { at: whichPage, id: userInQuestion } = req.query;
     const paging = +req.query.paging || 0;
@@ -240,7 +251,6 @@ const getNewsfeed = async (req, res) => {
             const { data } = await newsfeed.get(
                 `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
-
             userTempNewsfeedStorage[userAsking] = data.data;
             newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
                 0,
@@ -255,7 +265,6 @@ const getNewsfeed = async (req, res) => {
             const { data } = await newsfeed.get(
                 `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
-
             userTempNewsfeedStorage[userAsking] = data.data;
             newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
             redisClient.set(
@@ -354,7 +363,7 @@ const getUserInfo = async (req, res) => {
                 has_cover: user_cover_pic == 1,
                 id: userInQuestion,
             }),
-            friend_count,
+            friend_count: +friend_count,
             recent_friends,
             friend_status,
             follow_status,
@@ -586,7 +595,5 @@ module.exports = {
     userUnfollows,
     getUserFollowings,
     getUserFollowers,
-    dropFollowers,
     readPost,
-    testGetNewsfeed,
 };

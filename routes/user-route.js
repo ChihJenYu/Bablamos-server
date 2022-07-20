@@ -17,10 +17,8 @@ const {
     userFollows,
     userUnfollows,
     getUserFollowers,
-    dropFollowers,
     getUserFollowings,
     readPost,
-    testGetNewsfeed,
 } = require("../controllers/user-controller");
 // const { multerMiddleware } = require("../utils/util");
 // const { editUserInfo } = require("../../bablamos-client/src/apis/user");
@@ -78,10 +76,7 @@ router
 
 router.route("/user/following").get(asyncErrorHandler(getUserFollowings)); // id, paging
 
-router
-    .route("/user/follower")
-    .get(asyncErrorHandler(getUserFollowers)) // id, paging
-    .delete([authentication, asyncErrorHandler(dropFollowers)]); // type, req.body: {user_id_to_drop: []}
+router.route("/user/follower").get(asyncErrorHandler(getUserFollowers)); // id, paging
 
 router.route("/user/read").post([authentication, readPost]);
 

@@ -187,7 +187,6 @@ class User {
         if (!validator.isEmail(this.email)) {
             throw new Error("Invalid email");
         }
-
         const hashedPassword = await bcrypt.hash(this.password, SALT_ROUNDS);
         this.password = hashedPassword;
         const query = `INSERT INTO user (username, email, password, user_profile_pic, user_cover_pic, allow_stranger_follow, info) VALUES (?, ?, ?, ?, ?, ?, ?)`;

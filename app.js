@@ -11,7 +11,6 @@ app.use("/api", [
     require("./routes/post-route"),
     require("./routes/comment-route"),
     require("./routes/user-route"),
-    require("./routes/tag-route"),
     require("./routes/notification-route"),
 ]);
 
@@ -21,5 +20,4 @@ app.use((err, req, res, next) => {
 });
 
 const server = require("http").createServer(app);
-
 module.exports = server;
