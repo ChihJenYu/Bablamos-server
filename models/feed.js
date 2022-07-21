@@ -491,7 +491,7 @@ class Feed extends Post {
 
     static async getLatestComments(post_id, comment_count, user_asking) {
         let [latestComments] = await db.pool.query(
-            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
+            `select c.post_id, c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
             sum(
                 case when lu.user_id is null then 0 else 1 end
             ) as like_count ${
@@ -532,5 +532,10 @@ class Feed extends Post {
         };
     }
 }
+
+// (async () => {
+//     const allComments = await Feed.getLatestComments([2, 3, 4], 1, 2);
+//     console.log(allComments);
+// })();
 
 module.exports = Feed;
