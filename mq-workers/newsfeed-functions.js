@@ -103,29 +103,40 @@ const updateEdgeRankScore = {
     },
 };
 
+const sortNewsfeed = {
+    $push: {
+        newsfeed: {
+            $each: [],
+            $sort: {
+                edge_rank_score: -1,
+            },
+        },
+    },
+};
+
 // type: ["updateOne", "updateMany"]
 // cond: { user_id: 2 }
 // pipelines: [{ $set: ... }, { ... }]
-const recalculateEdgeRankScore = async ({ method, cond, pipelines }) => {
-    if (method === "updateOne") {
-        await User.updateOne(cond, pipelines);
-    } else {
-        await User.updateMany(cond, pipelines);
-    }
-};
+// const recalculateEdgeRankScore = async ({ method, cond, pipelines }) => {
+//     if (method === "updateOne") {
+//         await User.updateOne(cond, pipelines);
+//     } else {
+//         await User.updateMany(cond, pipelines);
+//     }
+// };
 
-const sortNewsfeed = async () => {
-    await User.updateMany({
-        $push: {
-            newsfeed: {
-                $each: [],
-                $sort: {
-                    edge_rank_score: -1,
-                },
-            },
-        },
-    });
-};
+// const sortNewsfeed = async () => {
+//     await User.updateMany({
+//         $push: {
+//             newsfeed: {
+//                 $each: [],
+//                 $sort: {
+//                     edge_rank_score: -1,
+//                 },
+//             },
+//         },
+//     });
+// };
 
 // update user's affinity list and score in each newsfeed item
 const recalcAffinityTable = async () => {
@@ -141,7 +152,7 @@ const recalcAffinityTable = async () => {
     const allUsers = Object.keys(userAffinityTable);
     // { "1": affinity_list, "2": affinity_list, ... }
     let batchUserAffinity = {};
-    const bulkWrites = [];
+    const updates = [];
     for (let i = 0; i < allUsers.length; i++) {
         user = +allUsers[i];
         // get affinity in batches of 10 users
@@ -183,7 +194,7 @@ const recalcAffinityTable = async () => {
                     oldAffinityWithUser.affinity !==
                         userAffinityTable[user][otherUser])
             ) {
-                bulkWrites.push({
+                updates.push({
                     updateOne: {
                         filter: {
                             user_id: user,
@@ -222,7 +233,7 @@ const recalcAffinityTable = async () => {
                 affinity_with_self: userAffinityTable[otherUser][user],
             });
         }
-        bulkWrites.push({
+        updates.push({
             updateOne: {
                 filter: {
                     user_id: user,
@@ -236,14 +247,21 @@ const recalcAffinityTable = async () => {
             },
         });
     }
-    console.log("bulkWrite job size: ", bulkWrites.length);
-    await User.bulkWrite(bulkWrites);
-    await recalculateEdgeRankScore({
-        method: "updateMany",
-        cond: {},
-        pipelines: [updateEdgeRankScore],
+    console.log("bulkWrite job size: ", updates.length);
+    // await User.bulkWrite(updates);
+    updates.push({
+        updateMany: {
+            filter: {},
+            update: [updateEdgeRankScore],
+        },
     });
-    await sortNewsfeed();
+    updates.push({
+        updateMany: {
+            filter: {},
+            update: sortNewsfeed,
+        },
+    });
+    await User.bulkWrite(updates);
     const completeTime = Date.now();
     console.log(
         `Updating user affinity in Mongo took ${
@@ -255,20 +273,20 @@ const recalcAffinityTable = async () => {
     );
 };
 
-// type 1 (per 5m) & 2 (per 24 hour)
 const recalcTimeDecayFactor = async ({ type }) => {
     const beginTime = Date.now();
     console.log("Begin job: recalculating time decay factor");
-    let updates;
+    let updates = [];
     if (type === 1) {
-        const updateOneHour = User.updateMany(
-            {},
-            {
-                $set: {
-                    "newsfeed.$[el].time_decay_factor": +ONE_HOUR_TIME_DECAY,
+        updates.push({
+            updateMany: {
+                filter: {},
+                update: {
+                    $set: {
+                        "newsfeed.$[el].time_decay_factor":
+                            +ONE_HOUR_TIME_DECAY,
+                    },
                 },
-            },
-            {
                 arrayFilters: [
                     {
                         "el.created_at": {
@@ -277,16 +295,17 @@ const recalcTimeDecayFactor = async ({ type }) => {
                         },
                     },
                 ],
-            }
-        );
-        const updateSixHours = User.updateMany(
-            {},
-            {
-                $set: {
-                    "newsfeed.$[el].time_decay_factor": +SIX_HOUR_TIME_DECAY,
-                },
             },
-            {
+        });
+        updates.push({
+            updateMany: {
+                filter: {},
+                update: {
+                    $set: {
+                        "newsfeed.$[el].time_decay_factor":
+                            +SIX_HOUR_TIME_DECAY,
+                    },
+                },
                 arrayFilters: [
                     {
                         "el.created_at": {
@@ -295,16 +314,16 @@ const recalcTimeDecayFactor = async ({ type }) => {
                         },
                     },
                 ],
-            }
-        );
-        const updateTwentyFourHours = User.updateMany(
-            {},
-            {
-                $set: {
-                    "newsfeed.$[el].time_decay_factor": +ONE_DAY_TIME_DECAY,
-                },
             },
-            {
+        });
+        updates.push({
+            updateMany: {
+                filter: {},
+                update: {
+                    $set: {
+                        "newsfeed.$[el].time_decay_factor": +ONE_DAY_TIME_DECAY,
+                    },
+                },
                 arrayFilters: [
                     {
                         "el.created_at": {
@@ -313,16 +332,16 @@ const recalcTimeDecayFactor = async ({ type }) => {
                         },
                     },
                 ],
-            }
-        );
-        const updateOneDay = User.updateMany(
-            {},
-            {
-                $set: {
-                    "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
-                },
             },
-            {
+        });
+        updates.push({
+            updateMany: {
+                filter: {},
+                update: {
+                    $set: {
+                        "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
+                    },
+                },
                 arrayFilters: [
                     {
                         "el.created_at": {
@@ -333,61 +352,156 @@ const recalcTimeDecayFactor = async ({ type }) => {
                         },
                     },
                 ],
-            }
-        );
-        updates = [
-            updateOneHour,
-            updateSixHours,
-            updateTwentyFourHours,
-            updateOneDay,
-        ];
-    } else {
-        updates = [
-            User.updateMany(
-                {},
-                {
-                    $mul: {
-                        "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
-                    },
-                },
-                {
-                    arrayFilters: [
-                        {
-                            "el.created_at": {
-                                $lte: Date.now() / 1000 - 60 * 60 * 24,
-                            },
-                            "el.time_decay_factor": {
-                                $gte: +DAYS_BASE,
-                            },
-                        },
-                    ],
-                }
-            ),
-        ];
+            },
+        });
     }
-    Promise.allSettled(updates)
-        .then(() =>
-            recalculateEdgeRankScore({
-                method: "updateMany",
-                cond: {},
-                pipelines: [updateEdgeRankScore],
-            })
-        )
-        .then(() => sortNewsfeed())
-        .then(() =>
-            console.log(
-                `Total time elapsed: ${
-                    Date.now() - beginTime
-                }ms\n-----------------------------------------`
-            )
-        );
-    // await recalculateEdgeRankScore({
-    //     method: "updateMany",
-    //     cond: {},
-    //     pipelines: [updateEdgeRankScore],
-    // });
-    // await sortNewsfeed();
+    updates.push({
+        updateMany: {
+            filter: {},
+            update: [updateEdgeRankScore],
+        },
+    });
+    updates.push({
+        updateMany: {
+            filter: {},
+            update: sortNewsfeed,
+        },
+    });
+    await User.bulkWrite(updates);
+    console.log(
+        `Total time elapsed: ${
+            Date.now() - beginTime
+        }ms\n-----------------------------------------`
+    );
 };
+
+// type 1 (per 5m) & 2 (per 24 hour)
+// const recalcTimeDecayFactor = async ({ type }) => {
+//     const beginTime = Date.now();
+//     console.log("Begin job: recalculating time decay factor");
+//     let updates;
+//     if (type === 1) {
+//         const updateOneHour = User.updateMany(
+//             {},
+//             {
+//                 $set: {
+//                     "newsfeed.$[el].time_decay_factor": +ONE_HOUR_TIME_DECAY,
+//                 },
+//             },
+//             {
+//                 arrayFilters: [
+//                     {
+//                         "el.created_at": {
+//                             $lte: Date.now() / 1000 - 60 * 10,
+//                             $gte: Date.now() / 1000 - 60 * 60,
+//                         },
+//                     },
+//                 ],
+//             }
+//         );
+//         const updateSixHours = User.updateMany(
+//             {},
+//             {
+//                 $set: {
+//                     "newsfeed.$[el].time_decay_factor": +SIX_HOUR_TIME_DECAY,
+//                 },
+//             },
+//             {
+//                 arrayFilters: [
+//                     {
+//                         "el.created_at": {
+//                             $lte: Date.now() / 1000 - 60 * 60 * 1,
+//                             $gte: Date.now() / 1000 - 60 * 60 * 6,
+//                         },
+//                     },
+//                 ],
+//             }
+//         );
+//         const updateTwentyFourHours = User.updateMany(
+//             {},
+//             {
+//                 $set: {
+//                     "newsfeed.$[el].time_decay_factor": +ONE_DAY_TIME_DECAY,
+//                 },
+//             },
+//             {
+//                 arrayFilters: [
+//                     {
+//                         "el.created_at": {
+//                             $lte: Date.now() / 1000 - 60 * 60 * 6,
+//                             $gte: Date.now() / 1000 - 60 * 60 * 24,
+//                         },
+//                     },
+//                 ],
+//             }
+//         );
+//         const updateOneDay = User.updateMany(
+//             {},
+//             {
+//                 $set: {
+//                     "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
+//                 },
+//             },
+//             {
+//                 arrayFilters: [
+//                     {
+//                         "el.created_at": {
+//                             $lte: Date.now() / 1000 - 60 * 60 * 24,
+//                         },
+//                         "el.time_decay_factor": {
+//                             $lt: +DAYS_BASE,
+//                         },
+//                     },
+//                 ],
+//             }
+//         );
+//         updates = [
+//             updateOneHour,
+//             updateSixHours,
+//             updateTwentyFourHours,
+//             updateOneDay,
+//         ];
+//     } else {
+//         updates = [
+//             User.updateMany(
+//                 {},
+//                 {
+//                     $mul: {
+//                         "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
+//                     },
+//                 },
+//                 {
+//                     arrayFilters: [
+//                         {
+//                             "el.created_at": {
+//                                 $lte: Date.now() / 1000 - 60 * 60 * 24,
+//                             },
+//                             "el.time_decay_factor": {
+//                                 $gte: +DAYS_BASE,
+//                             },
+//                         },
+//                     ],
+//                 }
+//             ),
+//         ];
+//     }
+//     Promise.allSettled(updates)
+//         .then(() =>
+//             recalculateEdgeRankScore({
+//                 method: "updateMany",
+//                 cond: {},
+//                 pipelines: [updateEdgeRankScore],
+//             })
+//         )
+//         .then(() => sortNewsfeed())
+//         .then(() =>
+//             console.log(
+//                 `Total time elapsed: ${
+//                     Date.now() - beginTime
+//                 }ms\n-----------------------------------------`
+//             )
+//         );
+// };
 
 // type: ["like", "comment", "share"]
 const checkPopCount = async ({ post_id, type }) => {
@@ -401,6 +515,7 @@ const checkPopCount = async ({ post_id, type }) => {
     });
     let pop_count;
     let newPopSubScore;
+    const updates = [];
     const [{ user_id }] = await Post.find(["user_id"], { id: post_id });
 
     let allFollowerIds = await getUserIds({
@@ -417,19 +532,21 @@ const checkPopCount = async ({ post_id, type }) => {
             return;
         }
         newPopSubScore = calculateLikeScore(data.like_count);
-        await User.updateMany(
-            {
-                user_id: {
-                    $in: allFollowerIds,
+        updates.push({
+            updateMany: {
+                filter: {
+                    user_id: {
+                        $in: allFollowerIds,
+                    },
+                    "newsfeed.post_id": post_id,
                 },
-                "newsfeed.post_id": post_id,
+                update: {
+                    $set: {
+                        "newsfeed.$.like_score": newPopSubScore,
+                    },
+                },
             },
-            {
-                $set: {
-                    "newsfeed.$.like_score": newPopSubScore,
-                },
-            }
-        );
+        });
     } else if (type == "comment") {
         pop_count = data.comment_count;
         if (pop_count % 7 !== 0 || pop_count === 0) {
@@ -437,19 +554,21 @@ const checkPopCount = async ({ post_id, type }) => {
             return;
         }
         newPopSubScore = calculateCommentScore(data.comment_count);
-        await User.updateMany(
-            {
-                user_id: {
-                    $in: allFollowerIds,
+        updates.push({
+            updateMany: {
+                filter: {
+                    user_id: {
+                        $in: allFollowerIds,
+                    },
+                    "newsfeed.post_id": post_id,
                 },
-                "newsfeed.post_id": post_id,
+                update: {
+                    $set: {
+                        "newsfeed.$.comment_score": newPopSubScore,
+                    },
+                },
             },
-            {
-                $set: {
-                    "newsfeed.$.comment_score": newPopSubScore,
-                },
-            }
-        );
+        });
     } else {
         pop_count = data.share_count;
         if (pop_count % 5 !== 0 || pop_count === 0) {
@@ -457,33 +576,43 @@ const checkPopCount = async ({ post_id, type }) => {
             return;
         }
         newPopSubScore = calculateShareScore(data.share_count);
-        await User.updateMany(
-            {
+        updates.push({
+            updateMany: {
+                filter: {
+                    user_id: {
+                        $in: allFollowerIds,
+                    },
+                    "newsfeed.post_id": post_id,
+                },
+                update: {
+                    $set: {
+                        "newsfeed.$.share_score": newPopSubScore,
+                    },
+                },
+            },
+        });
+    }
+    updates.push({
+        updateMany: {
+            filter: {
                 user_id: {
                     $in: allFollowerIds,
                 },
-                "newsfeed.post_id": post_id,
             },
-            {
-                $set: {
-                    "newsfeed.$.share_score": newPopSubScore,
-                },
-            }
-        );
-    }
-
-    await recalculateEdgeRankScore({
-        method: "updateMany",
-        cond: {
-            user_id: {
-                $in: allFollowerIds,
-            },
+            update: [updatePopularity, updateEdgeRankScore],
         },
-        pipelines: [updatePopularity, updateEdgeRankScore],
     });
-
-    await sortNewsfeed();
-
+    updates.push({
+        updateMany: {
+            filter: {
+                user_id: {
+                    $in: allFollowerIds,
+                },
+            },
+            update: sortNewsfeed,
+        },
+    });
+    await User.bulkWrite(updates);
     const postEndTime = Date.now();
     console.log(
         `Updating popularity and edge rank score for post #${post_id} took ${

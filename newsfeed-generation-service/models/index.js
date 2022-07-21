@@ -1,4 +1,4 @@
-const db = require("../mysql");
+const db = require("../../mysql");
 const { getValueOr } = require("../../utils/util");
 // AFFINITY
 const {
