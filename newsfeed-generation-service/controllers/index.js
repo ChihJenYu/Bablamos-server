@@ -195,71 +195,55 @@ const recalcNewsfeed = async (req, res) => {
         res.sendStatus(200);
         return;
     }
-    for (let readPost of readPostIds) {
-        // increment view count and decrease edge rank score
-        await User.updateOne(
-            { user_id: userId, "newsfeed.post_id": readPost },
-            {
+    const updates = [];
+    updates.push({
+        updateOne: {
+            filter: { user_id: userId },
+            update: {
                 $inc: {
-                    "newsfeed.$.views": 1,
+                    "newsfeed.$[elem].views": 1,
                 },
                 $mul: {
-                    "newsfeed.$.edge_rank_score": 1 / +ALREADY_SEEN_BASE,
+                    "newsfeed.$[elem].edge_rank_score": 1 / +ALREADY_SEEN_BASE,
                 },
                 $set: {
-                    "newsfeed.$.is_new": false,
+                    "newsfeed.$[elem].is_new": false,
                 },
                 $set: {
-                    "newsfeed.$.fresh_pop_buff": 0,
+                    "newsfeed.$[elem].fresh_pop_buff": 0,
                 },
-            }
-        );
-    }
-
-    // reorder
-    await User.updateOne(
-        { user_id: userId },
-        {
-            $push: {
-                newsfeed: {
-                    $each: [],
-                    $sort: {
-                        edge_rank_score: -1,
+            },
+            arrayFilters: [
+                {
+                    "elem.post_id": {
+                        $in: readPostIds,
+                    },
+                },
+            ],
+        },
+    });
+    updates.push({
+        updateOne: {
+            filter: { user_id: userId },
+            update: {
+                $push: {
+                    newsfeed: {
+                        $each: [],
+                        $sort: {
+                            edge_rank_score: -1,
+                        },
                     },
                 },
             },
-        }
-    );
+        },
+    });
+    await User.bulkWrite(updates);
 
     console.log(
         `View count update complete; took ${Date.now() - timestampStart}ms`
     );
     res.sendStatus(200);
 };
-
-// for (let readPost of readPostIds) {
-// increment view count and decrease edge rank score
-
-User.updateOne(
-    { user_id: 2 },
-    {
-        $set: {
-            "newsfeed.$[elem].views": 0,
-        },
-    },
-    {
-        arrayFilters: [
-            {
-                "elem.post_id": {
-                    $in: [1, 2],
-                },
-            },
-        ],
-    }
-).then(() => {
-    console.log("Done");
-});
-// }
 
 module.exports = {
     createUser,

@@ -43,6 +43,69 @@ class Feed extends Post {
         this.user_profile_pic = user_profile_pic || 0;
         this.already_liked = already_liked == 1 ? 1 : 0;
     }
+
+    // { metric: "like" || "comment" || "share" }
+    static async getPopularity({ post_id, metric }) {
+        let queryMetric = {};
+        if (metric === "like") {
+            queryMetric["column"] = `lc.id, lc.user_id, lc.like_count`;
+            queryMetric["condition"] = `(
+                select 
+                    post.id, 
+                    post.user_id,
+                    count(lu.user_id) as like_count
+                from post 
+                left join like_user lu on post.id = lu.post_id
+                where post.id = ?
+                group by post.id
+                order by post.created_at desc
+                ) as lc`;
+        } else if (metric === "comment") {
+            queryMetric["column"] = `cc.id, cc.user_id, cc.comment_count`;
+            queryMetric["condition"] = `(
+                select 
+                    post.id, post.user_id, count(c.id) as comment_count
+                from post 
+                left join comment c on post.id = c.post_id
+                where post.id = ?
+                group by post.id
+                order by post.created_at desc
+                ) as cc`;
+        } else if (metric === "share") {
+            queryMetric["column"] = `sc.id, sc.user_id, sc.share_count`;
+            queryMetric["condition"] = `
+                (
+                select 
+                    post.id, post.user_id, sc.share_count
+                from post 
+                left join 
+                (
+                    select distinct p.id, 
+                    case when 
+                    share_view.count is null
+                    then 0 
+                    else share_view.count
+                    end as share_count
+                    from post p 
+                    left join (select distinct shared_post_id, 
+                    count(*) as count from post group by shared_post_id) share_view 
+                    on p.id = share_view.shared_post_id
+                ) sc on post.id = sc.id
+                where post.id = ?
+                group by post.id, sc.share_count
+                order by post.created_at desc
+                ) as sc`;
+        }
+        let [popularity] = await db.pool.query(
+            `select ${queryMetric.column}
+            from 
+            ${queryMetric.condition}
+            `,
+            [post_id]
+        );
+        return popularity[0];
+    }
+
     // returns array of feed instances posted by a particular user_id
     static async findByAuthorId(user_id, user_asking, paging) {
         let [allFeeds] = await db.pool.query(
@@ -283,68 +346,6 @@ class Feed extends Post {
             newsfeedToReturn.push(newFeed);
         }
         return newsfeedToReturn;
-    }
-
-    // { metric: "like" || "comment" || "share" }
-    static async getPopularity({ post_id, metric }) {
-        let queryMetric = {};
-        if (metric === "like") {
-            queryMetric["column"] = `lc.id, lc.user_id, lc.like_count`;
-            queryMetric["condition"] = `(
-                select 
-                    post.id, 
-                    post.user_id,
-                    count(lu.user_id) as like_count
-                from post 
-                left join like_user lu on post.id = lu.post_id
-                where post.id = ?
-                group by post.id
-                order by post.created_at desc
-                ) as lc`;
-        } else if (metric === "comment") {
-            queryMetric["column"] = `cc.id, cc.user_id, cc.comment_count`;
-            queryMetric["condition"] = `(
-                select 
-                    post.id, post.user_id, count(c.id) as comment_count
-                from post 
-                left join comment c on post.id = c.post_id
-                where post.id = ?
-                group by post.id
-                order by post.created_at desc
-                ) as cc`;
-        } else if (metric === "share") {
-            queryMetric["column"] = `sc.id, sc.user_id, sc.share_count`;
-            queryMetric["condition"] = `
-                (
-                select 
-                    post.id, post.user_id, sc.share_count
-                from post 
-                left join 
-                (
-                    select distinct p.id, 
-                    case when 
-                    share_view.count is null
-                    then 0 
-                    else share_view.count
-                    end as share_count
-                    from post p 
-                    left join (select distinct shared_post_id, 
-                    count(*) as count from post group by shared_post_id) share_view 
-                    on p.id = share_view.shared_post_id
-                ) sc on post.id = sc.id
-                where post.id = ?
-                group by post.id, sc.share_count
-                order by post.created_at desc
-                ) as sc`;
-        }
-        let [popularity] = await db.pool.query(
-            `select ${queryMetric.column}
-            from 
-            ${queryMetric.condition}
-            `,
-            [post_id]
-        );
-        return popularity[0];
     }
 
     static async getFeedDetail(post_id, user_asking) {
