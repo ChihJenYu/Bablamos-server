@@ -1,7 +1,7 @@
 const router = require("express").Router();
-const multer = require("multer");
 const { asyncErrorHandler } = require("../utils/util");
 const { authentication } = require("../middlewares/auth");
+const multerMiddleware = require("../middlewares/multer");
 const {
     userSignUp,
     userSignIn,
@@ -20,16 +20,8 @@ const {
     getUserFollowings,
     readPost,
 } = require("../controllers/user-controller");
-// const { multerMiddleware } = require("../utils/util");
-// const { editUserInfo } = require("../../bablamos-client/src/apis/user");
 
-router
-    .route("/user/signup")
-    // .post([multerMiddleware("profile-pic"), asyncErrorHandler(userSignUp)]);
-    .post([
-        multer({ dest: null }).single("profile-pic"),
-        asyncErrorHandler(userSignUp),
-    ]);
+router.route("/user/signup").post([asyncErrorHandler(userSignUp)]);
 
 router.route("/user/signin").post(asyncErrorHandler(userSignIn));
 
@@ -46,10 +38,7 @@ router
     .get([authentication, asyncErrorHandler(getUserInfo)])
     .patch([
         authentication,
-        multer({ dest: null }).fields([
-            { name: "cover-pic" },
-            { name: "profile-pic" },
-        ]),
+        multerMiddleware,
         asyncErrorHandler(editUserProfile),
     ]);
 

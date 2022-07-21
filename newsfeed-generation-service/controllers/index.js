@@ -91,14 +91,6 @@ const updateNewsfeed = async (req, res) => {
             const timestampStart = Date.now();
 
             let affinityWithSelf = {};
-            // get affinity_with_self from redis
-            // const affinityWithSelfJSON = await redisClient.get(
-            //     `affinity_with_self_user_${userId}`
-            // );
-            // if (affinityWithSelfJSON) {
-            //     affinityWithSelf = JSON.parse(affinityWithSelfJSON);
-            // } else {
-            // if not exist, get from mongo
             const posterObj = await User.findOne(
                 { user_id: userId },
                 { affinity_with_self: 1 }
@@ -108,11 +100,6 @@ const updateNewsfeed = async (req, res) => {
                 posterObj.affinity_with_self.forEach((user) => {
                     affinityWithSelf[user.user_id] = user.affinity_with_self;
                 });
-                // write affinity_with_self to redis
-                // redisClient.set(
-                //     `affinity_with_self_user_${userId}`,
-                //     JSON.stringify(affinityWithSelf)
-                // );
             }
             // }
             const bulkWrites = [];
@@ -223,8 +210,8 @@ const recalcNewsfeed = async (req, res) => {
                     "newsfeed.$.is_new": false,
                 },
                 $set: {
-                    "newsfeed.$.fresh_pop_buff": 0
-                }
+                    "newsfeed.$.fresh_pop_buff": 0,
+                },
             }
         );
     }
@@ -249,6 +236,30 @@ const recalcNewsfeed = async (req, res) => {
     );
     res.sendStatus(200);
 };
+
+// for (let readPost of readPostIds) {
+// increment view count and decrease edge rank score
+
+User.updateOne(
+    { user_id: 2 },
+    {
+        $set: {
+            "newsfeed.$[elem].views": 0,
+        },
+    },
+    {
+        arrayFilters: [
+            {
+                "elem.post_id": {
+                    $in: [1, 2],
+                },
+            },
+        ],
+    }
+).then(() => {
+    console.log("Done");
+});
+// }
 
 module.exports = {
     createUser,

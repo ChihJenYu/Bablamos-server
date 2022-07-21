@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
+const multer = require("multer");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -15,7 +16,14 @@ app.use("/api", [
 ]);
 
 app.use((err, req, res, next) => {
-    console.log(err);
+    switch (err.message) {
+        case "File too large":
+            res.status(400).send({ error: "File too large" });
+            return;
+        case "Please upload an image":
+            res.status(400).send({ error: "File not an image" });
+            return;
+    }
     res.status(500).send("Internal Server Error");
 });
 

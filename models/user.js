@@ -2,12 +2,19 @@ const db = require("../mysql");
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 const jwt = require("jsonwebtoken");
+const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET_NAME } =
+    process.env;
 const SALT_ROUNDS = 10;
 const JWT_EXPIRE = "365d";
 const CLOUDFRONT_DOMAIN_NAME = "https://d3h0a68hsbn5ed.cloudfront.net";
 const DEFAULT_FRIENDS_PAGE_SIZE = 20;
 const PROFILE_FRIENDS_PAGE_SIZE = 9;
 const FRIENDS_SUGGESTIONS = 5;
+const aws = require("aws-sdk");
+const s3 = new aws.S3({
+    accessKeyId: AWS_ACCESS_KEY_ID,
+    secretAccessKey: AWS_SECRET_ACCESS_KEY,
+});
 // const FRIENDS
 class User {
     // password is raw; hashing occurs in save method
@@ -200,6 +207,18 @@ class User {
             this.info,
         ]);
         return user_id;
+    }
+
+    static async uploadToS3({ user_id, buffer, which }) {
+        return await s3
+            .putObject({
+                Bucket: AWS_S3_BUCKET_NAME,
+                Key: `user/${user_id}/${which}.jpg`,
+                Body: buffer,
+                CacheControl: "no-cache",
+                Expires: new Date(),
+            })
+            .promise();
     }
 
     // action = ('accept','send','receive')

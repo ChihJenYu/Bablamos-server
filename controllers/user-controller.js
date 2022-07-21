@@ -1,9 +1,8 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
 const Post = require("../models/post");
-const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET_NAME } =
-    process.env;
 const search = require("../apis/search");
+const multerMiddleware = require("../middlewares/multer");
 const { ELASTIC_USER_INDEX } = process.env;
 const {
     popularityCalculatorJobQueue,
@@ -11,15 +10,10 @@ const {
 } = require("../mq/");
 const redisClient = require("../redis");
 const newsfeed = require("../apis/newsfeed");
-const aws = require("aws-sdk");
 const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 const SEARCH_USER_PAGE_SIZE = 6;
 let userTempNewsfeedStorage = {};
-const s3 = new aws.S3({
-    accessKeyId: AWS_ACCESS_KEY_ID,
-    secretAccessKey: AWS_SECRET_ACCESS_KEY,
-});
 
 // type = "native"
 // implement check for duplicate user in model
@@ -152,27 +146,19 @@ const editUserProfile = async (req, res) => {
         let coverPicChanged;
         if (req.files["profile-pic"]) {
             profilePicChanged = 1;
-            await s3
-                .putObject({
-                    Bucket: AWS_S3_BUCKET_NAME,
-                    Key: `user/${userId}/profile.jpg`,
-                    Body: req.files["profile-pic"][0].buffer,
-                    CacheControl: "no-cache",
-                    Expires: new Date(),
-                })
-                .promise();
+            await User.uploadToS3({
+                user_id: userId,
+                buffer: req.files["profile-pic"][0].buffer,
+                which: "profile",
+            });
         }
         if (req.files["cover-pic"]) {
             coverPicChanged = 1;
-            await s3
-                .putObject({
-                    Bucket: AWS_S3_BUCKET_NAME,
-                    Key: `user/${userId}/cover.jpg`,
-                    Body: req.files["cover-pic"][0].buffer,
-                    CacheControl: "no-cache",
-                    Expires: new Date(),
-                })
-                .promise();
+            await User.uploadToS3({
+                user_id: userId,
+                buffer: req.files["cover-pic"][0].buffer,
+                which: "cover",
+            });
         }
         const user = new User({ id: userId });
         let updateArgs = {};

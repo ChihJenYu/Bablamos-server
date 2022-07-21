@@ -1,7 +1,15 @@
 require("dotenv").config();
 const { expect, requester } = require("./setup");
 const { users, posts } = require("./fake-data");
-describe("User", () => {
+const User = require("../models/user");
+const sinon = require("sinon");
+const path = require("path");
+const { stubString } = require("lodash");
+let stub;
+let access_token;
+let signed_in_user;
+
+describe("Sign in & sign up", () => {
     // Sign up
     it("Sign up", async () => {
         const user = {
@@ -91,25 +99,46 @@ describe("User", () => {
         expect(res.status).to.equal(403);
         expect(res.body.error).to.equal("Incorrect credentials");
     });
+});
 
-    // Get user info at index
-    it("Get index user info with correct access token", async () => {
+describe("User APIs", () => {
+    before(async () => {
         const user1 = users[0];
         const user = {
             email: user1.email,
             password: user1.password,
         };
 
-        const res = await requester.post("/api/user/signin").send(user);
-        const { access_token } = res.body;
+        const { body } = await requester.post("/api/user/signin").send(user);
+        access_token = body.access_token;
+        signed_in_user = body.user;
+        const fakeUploadToS3 = ({ user_id, buffer, which }) => {
+            return new Promise((resolve, reject) => {
+                if (
+                    !user_id ||
+                    !buffer ||
+                    !which ||
+                    (which && which !== "profile") ||
+                    (which && which !== "cover")
+                ) {
+                    resolve({ status: 500 });
+                } else {
+                    resolve();
+                }
+            });
+        };
+        stub = sinon.stub(User, "uploadToS3").callsFake(fakeUploadToS3);
+    });
 
+    // Get user info at index
+    it("Get index user info with correct access token", async () => {
         const { body: userInfoBody } = await requester
             .get("/api/user/info?at=index")
             .set("Authorization", access_token);
         const returnedUserPayload = userInfoBody.data;
         const payloadExpect = {
             user_id: returnedUserPayload.user_id,
-            username: user1.username,
+            username: signed_in_user.username,
         };
 
         expect(returnedUserPayload)
@@ -118,29 +147,9 @@ describe("User", () => {
         expect(returnedUserPayload.profile_pic_url).to.be.a("string");
     });
 
-    it("Get index user info without access token", async () => {
-        const res = await requester.get("/api/user/info?at=index");
-        expect(res.status).to.equal(401);
-    });
-
-    it("Get index user info with incorrect access token", async () => {
-        const res = await requester
-            .get("/api/user/info?at=index")
-            .set("Authorization", "bad_token");
-        expect(res.status).to.equal(403);
-    });
-
     // Get user info at profile
     it("Get profile user info with correct access token", async () => {
-        const [user1, user2] = users;
-        const user = {
-            email: user1.email,
-            password: user1.password,
-        };
-
-        const res = await requester.post("/api/user/signin").send(user);
-        const { access_token } = res.body;
-
+        const user2 = users[1];
         const { body: userInfoBody } = await requester
             .get("/api/user/info?at=profile&username=test_user2")
             .set("Authorization", access_token);
@@ -176,6 +185,11 @@ describe("User", () => {
             .set("Authorization", access_token);
 
         const userNewsfeed = newsfeedResponse.body.data;
+        const firstFeedExpect = {
+            user_id: posts[1].user_id,
+            content: posts[1].content,
+            shared_post_id: posts[1].shared_post_id,
+        };
         expect(userNewsfeed).to.have.lengthOf(2);
         expect(userNewsfeed[0]).to.have.all.keys([
             "id",
@@ -198,5 +212,125 @@ describe("User", () => {
             "already_liked",
             "profile_pic_url",
         ]);
+        expect(userNewsfeed[0])
+            .to.be.an("object")
+            .that.includes(firstFeedExpect);
+    });
+
+    // Edit user profile
+    it("Edit user info with correct access token", async () => {
+        const info = "Mocha is not matcha";
+        const editInfoRes = await requester
+            .patch("/api/user/info")
+            .set("Authorization", access_token)
+            .send({ info });
+        const [{ info: updatedInfo }] = await User.find(["info"], {
+            id: signed_in_user.id,
+        });
+        expect(editInfoRes.status).to.equal(200);
+        expect(updatedInfo).to.equal(info);
+    });
+
+    it("Edit user profile photo only with correct access token", async () => {
+        const editPhotoRes = await requester
+            .patch("/api/user/info")
+            .set("Authorization", access_token)
+            .field("Content-Type", "multipart/form-data")
+            .attach(
+                "profile-pic",
+                path.resolve(__dirname, "./images/test.jpg")
+            );
+        const [{ user_profile_pic }] = await User.find(["user_profile_pic"], {
+            id: signed_in_user.id,
+        });
+        const responseDataExpect = {
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: 1,
+                id: signed_in_user.id,
+            }),
+        };
+        expect(editPhotoRes.status).to.equal(200);
+        expect(user_profile_pic).to.equal(1);
+        expect(editPhotoRes.body.data)
+            .to.be.an("object")
+            .that.includes(responseDataExpect);
+    });
+
+    it("Edit user cover photo only with correct access token", async () => {
+        const editPhotoRes = await requester
+            .patch("/api/user/info")
+            .set("Authorization", access_token)
+            .field("Content-Type", "multipart/form-data")
+            .attach("cover-pic", path.resolve(__dirname, "./images/test.jpg"));
+        const [{ user_cover_pic }] = await User.find(["user_cover_pic"], {
+            id: signed_in_user.id,
+        });
+        const responseDataExpect = {
+            cover_pic_url: User.generateCoverUrl({
+                has_cover: 1,
+                id: signed_in_user.id,
+            }),
+        };
+        expect(editPhotoRes.status).to.equal(200);
+        expect(user_cover_pic).to.equal(1);
+        expect(editPhotoRes.body.data)
+            .to.be.an("object")
+            .that.includes(responseDataExpect);
+    });
+
+    it("Edit both profile and cover photos with correct access token", async () => {
+        const editPhotoRes = await requester
+            .patch("/api/user/info")
+            .set("Authorization", access_token)
+            .field("Content-Type", "multipart/form-data")
+            .attach("profile-pic", path.resolve(__dirname, "./images/test.jpg"))
+            .attach("cover-pic", path.resolve(__dirname, "./images/test.jpg"));
+        const [{ user_profile_pic, user_cover_pic }] = await User.find(
+            ["user_profile_pic", "user_cover_pic"],
+            {
+                id: signed_in_user.id,
+            }
+        );
+        const responseDataExpect = {
+            profile_pic_url: User.generatePictureUrl({
+                has_profile: 1,
+                id: signed_in_user.id,
+            }),
+            cover_pic_url: User.generateCoverUrl({
+                has_cover: 1,
+                id: signed_in_user.id,
+            }),
+        };
+        expect(editPhotoRes.status).to.equal(200);
+        expect(user_profile_pic).to.equal(1);
+        expect(user_cover_pic).to.equal(1);
+        expect(editPhotoRes.body.data)
+            .to.be.an("object")
+            .that.includes(responseDataExpect);
+    });
+
+    it("Upload images with illegal file size", async () => {
+        const editPhotoRes = await requester
+            .patch("/api/user/info")
+            .set("Authorization", access_token)
+            .field("Content-Type", "multipart/form-data")
+            .attach(
+                "profile-pic",
+                path.resolve(__dirname, "./images/large.jpg")
+            );
+        expect(editPhotoRes.status).to.equal(400);
+    });
+
+    it("Upload images with illegal file extension", async () => {
+        const editPhotoRes = await requester
+            .patch("/api/user/info")
+            .set("Authorization", access_token)
+            .field("Content-Type", "multipart/form-data")
+            .attach("profile-pic", path.resolve(__dirname, "./images/cmd.txt"));
+        expect(editPhotoRes.status).to.equal(400);
+    });
+
+    after(() => {
+        stub.restore();
     });
 });

@@ -4,12 +4,14 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "test": "NODE_ENV=test mocha --exit",
         "start-server": "nodemon server.js",
         "start-newsfeed": "node ./newsfeed-generation-service/server.js",
         "test-newsfeed": "NODE_ENV=test node ./newsfeed-generation-service/server.js",
+        "shutdown-newsfeed": "kill -3 $(lsof -ti:3001)",
         "init-newsfeed": "node ./newsfeed-generation-service/server.js init",
-        "start-socket": "nodemon ./socket-server/server.js"
+        "start-socket": "nodemon ./socket-server/server.js",
+        "mocha": "NODE_ENV=test mocha --exit",
+        "test": "npm run test-newsfeed & npm run mocha && npm run shutdown-newsfeed"
     },
     "author": "",
     "license": "ISC",
@@ -36,7 +38,9 @@
         "mysql2": "^2.3.3",
         "node-html-parser": "^5.3.3",
         "node-schedule": "^2.1.0",
+        "path": "^0.12.7",
         "redis": "^4.1.0",
+        "sinon": "^14.0.0",
         "socket.io": "^4.5.1",
         "socket.io-client": "^4.5.1",
         "validator": "^13.7.0"

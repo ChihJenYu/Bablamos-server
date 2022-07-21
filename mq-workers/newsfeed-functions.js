@@ -259,8 +259,9 @@ const recalcAffinityTable = async () => {
 const recalcTimeDecayFactor = async ({ type }) => {
     const beginTime = Date.now();
     console.log("Begin job: recalculating time decay factor");
+    let updates;
     if (type === 1) {
-        await User.updateMany(
+        const updateOneHour = User.updateMany(
             {},
             {
                 $set: {
@@ -278,7 +279,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
                 ],
             }
         );
-        await User.updateMany(
+        const updateSixHours = User.updateMany(
             {},
             {
                 $set: {
@@ -296,7 +297,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
                 ],
             }
         );
-        await User.updateMany(
+        const updateTwentyFourHours = User.updateMany(
             {},
             {
                 $set: {
@@ -314,7 +315,7 @@ const recalcTimeDecayFactor = async ({ type }) => {
                 ],
             }
         );
-        await User.updateMany(
+        const updateOneDay = User.updateMany(
             {},
             {
                 $set: {
@@ -334,39 +335,58 @@ const recalcTimeDecayFactor = async ({ type }) => {
                 ],
             }
         );
+        updates = [
+            updateOneHour,
+            updateSixHours,
+            updateTwentyFourHours,
+            updateOneDay,
+        ];
     } else {
-        await User.updateMany(
-            {},
-            {
-                $mul: {
-                    "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
-                },
-            },
-            {
-                arrayFilters: [
-                    {
-                        "el.created_at": {
-                            $lte: Date.now() / 1000 - 60 * 60 * 24,
-                        },
-                        "el.time_decay_factor": {
-                            $gte: +DAYS_BASE,
-                        },
+        updates = [
+            User.updateMany(
+                {},
+                {
+                    $mul: {
+                        "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
                     },
-                ],
-            }
-        );
+                },
+                {
+                    arrayFilters: [
+                        {
+                            "el.created_at": {
+                                $lte: Date.now() / 1000 - 60 * 60 * 24,
+                            },
+                            "el.time_decay_factor": {
+                                $gte: +DAYS_BASE,
+                            },
+                        },
+                    ],
+                }
+            ),
+        ];
     }
-    await recalculateEdgeRankScore({
-        method: "updateMany",
-        cond: {},
-        pipelines: [updateEdgeRankScore],
-    });
-    await sortNewsfeed();
-    console.log(
-        `Total time elapsed: ${
-            Date.now() - beginTime
-        }ms\n-----------------------------------------`
-    );
+    Promise.allSettled(updates)
+        .then(() =>
+            recalculateEdgeRankScore({
+                method: "updateMany",
+                cond: {},
+                pipelines: [updateEdgeRankScore],
+            })
+        )
+        .then(() => sortNewsfeed())
+        .then(() =>
+            console.log(
+                `Total time elapsed: ${
+                    Date.now() - beginTime
+                }ms\n-----------------------------------------`
+            )
+        );
+    // await recalculateEdgeRankScore({
+    //     method: "updateMany",
+    //     cond: {},
+    //     pipelines: [updateEdgeRankScore],
+    // });
+    // await sortNewsfeed();
 };
 
 // type: ["like", "comment", "share"]
