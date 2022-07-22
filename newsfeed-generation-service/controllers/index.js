@@ -3,15 +3,6 @@ const { FRESH_POP_BUFF, TEN_MINUTE_TIME_DECAY, ALREADY_SEEN_BASE } =
     process.env;
 const User = require("../models/user");
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
-const {
-    POP_LIKE_WEIGHT,
-    POP_SHARE_WEIGHT,
-    POP_COMMENT_WEIGHT,
-    ONE_HOUR_TIME_DECAY,
-    SIX_HOUR_TIME_DECAY,
-    ONE_DAY_TIME_DECAY,
-    DAYS_BASE,
-} = process.env;
 
 const createUser = async (req, res) => {
     const userId = req.query["user-id"];
@@ -68,6 +59,7 @@ const getNewsfeed = async (req, res) => {
                 $slice: [from, NEWSFEED_PER_PAGE_FOR_WEB_SERVER],
             },
             affinity: 0,
+            affinity_with_self: 0,
         }
     );
     if (!user) {

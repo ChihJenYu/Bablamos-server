@@ -1,10 +1,12 @@
-const { NODE_ENV, DBHOST, DBUSER, DBPASSWORD, DATABASE, TEST_DATABASE } = process.env;
+const { NODE_ENV, DBHOST, DBUSER, DBPASSWORD, DATABASE, TEST_DATABASE } =
+    process.env;
 const mysql = require("mysql2/promise");
 const pool = mysql.createPool({
     host: DBHOST,
     user: DBUSER,
     password: DBPASSWORD,
     database: NODE_ENV === "test" ? TEST_DATABASE : DATABASE,
+    multipleStatements: true,
 });
 
 // cols is an array of columns to be returned

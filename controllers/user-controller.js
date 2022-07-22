@@ -231,7 +231,6 @@ const getNewsfeed = async (req, res) => {
             localIndexToStart,
             localIndexToEnd + 1
         );
-
         // not within range
         if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
             const { data } = await newsfeed.get(
@@ -246,8 +245,7 @@ const getNewsfeed = async (req, res) => {
                 "NFGS_start_index_for_temp_storage_user_" + userAsking,
                 requestedStartIndex
             );
-        } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
-        } else {
+        } else if (newsfeedToReturn.length < NEWSFEED_PER_PAGE_FOR_CLIENT) {
             const { data } = await newsfeed.get(
                 `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
@@ -260,14 +258,14 @@ const getNewsfeed = async (req, res) => {
         }
 
         // add author profile_pic_url and commentor
-        for (let i = 0; i < newsfeedToReturn.length; i++) {
-            const feedId = newsfeedToReturn[i].post_id;
-            const feedContent = await Feed.getFeedDetail(feedId, userAsking);
-            if (!feedContent) {
-                continue;
-            }
-            newsfeedToReturn[i] = feedContent;
-        }
+        const postIds = newsfeedToReturn.map((nf) => {
+            return nf.post_id;
+        });
+        // must order as ordered in postIds
+        newsfeedToReturn =
+            postIds.length === 0
+                ? []
+                : await Feed.getFeedsDetail(postIds, userAsking);
         res.send({ data: newsfeedToReturn });
     } else if (whichPage === "profile") {
         if (!userInQuestion) {

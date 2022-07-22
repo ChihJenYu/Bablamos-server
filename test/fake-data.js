@@ -23,14 +23,12 @@ const posts = [
     {
         user_id: 1,
         content: "Test 1",
-        audience_type_id: 1,
         shared_post_id: null,
         photo_count: 0,
     },
     {
         user_id: 1,
         content: "Test 2",
-        audience_type_id: 1,
         shared_post_id: null,
         photo_count: 0,
     },

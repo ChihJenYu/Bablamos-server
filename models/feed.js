@@ -10,29 +10,19 @@ class Feed extends Post {
         username, // required
         content, // required
         created_at, // required
-        audience_type_id, // required
         user_profile_pic,
-        audience,
         shared_post_id,
         like_count,
         comment_count,
         share_count,
         latest_comments,
-        mentioned_users,
-        photo_count,
-        tags,
         already_liked,
     }) {
         super({
             id,
             user_id,
             content,
-            audience_type_id,
-            audience, // array of user_ids; optional
             shared_post_id, // optional
-            tags, // array
-            mentioned_users, // array; optional,
-            photo_count, // array; optional
             created_at, // optional
         });
         this.username = username;
@@ -106,13 +96,38 @@ class Feed extends Post {
         return popularity[0];
     }
 
+    static async attachFeedAddData(feed, user_asking) {
+        const newFeed = new Feed({
+            ...feed,
+        });
+        const { latestComments, next } = await Feed.getLatestComments(
+            newFeed.id,
+            COMMENT_PAGE_SIZE,
+            user_asking
+        );
+        newFeed.latest_comments = latestComments;
+        if (next) {
+            newFeed.comments_next_paging = next;
+        }
+        newFeed.profile_pic_url = User.generatePictureUrl({
+            has_profile: newFeed.user_profile_pic == 1,
+            id: newFeed.user_id,
+        });
+        if (newFeed.shared_post_id) {
+            newFeed.shared_post_data = await Post.getSharedData(
+                newFeed.shared_post_id
+            );
+        }
+        return newFeed;
+    }
+
     // returns array of feed instances posted by a particular user_id
     static async findByAuthorId(user_id, user_asking, paging) {
-        let [allFeeds] = await db.pool.query(
+        const [allFeeds] = await db.pool.query(
             `select
             lc.id, lc.user_id, u.username, u.user_profile_pic, 
-            lc.content, unix_timestamp(lc.created_at) as created_at, 
-            lc.audience_type_id, lc.shared_post_id, pts.tags, pmu.mentioned_users, lc.photo_count, lc.like_count, 
+            lc.content, unix_timestamp(lc.created_at) as created_at,
+             lc.shared_post_id, lc.like_count, 
             cc.comment_count, sc.share_count,
             case when
                 al.post_id is null
@@ -123,8 +138,7 @@ class Feed extends Post {
             (
             select 
                 post.id, post.user_id, post.content, post.created_at, 
-                post.audience_type_id, post.shared_post_id, post.photo_count, 
-                count(lu.user_id) as like_count
+                post.shared_post_id, count(lu.user_id) as like_count
             from post 
             left join like_user lu on post.id = lu.post_id
             where post.user_id = ?
@@ -165,29 +179,6 @@ class Feed extends Post {
             ) as sc on cc.id = sc.id
             join 
             user u on lc.user_id = u.id
-            left join
-            (
-            SELECT pt.post_id AS id, JSON_ARRAYAGG(
-                JSON_OBJECT('tag_name', t.name, 'tag_id', t.id)
-            ) AS tags 
-            FROM post_tag pt
-            JOIN tag t ON pt.tag_id = t.id
-            GROUP BY post_id
-            ) as pts on cc.id = pts.id
-            left join 
-            (
-            SELECT mu.post_id, JSON_ARRAYAGG(
-            JSON_OBJECT
-                (
-                'username', u.username, 
-                'user_profile_pic', u.user_profile_pic,
-                'user_id', u.id
-                )
-            ) AS mentioned_users
-            FROM mention_user mu
-            JOIN user u ON mu.user_id = u.id
-            GROUP BY mu.post_id
-            ) pmu on pmu.post_id = cc.id
             left join 
             (
             select post_id from like_user where user_id = ?
@@ -204,41 +195,9 @@ class Feed extends Post {
                 PERSONAL_FEEDS_DEFAULT_PAGE_SIZE,
             ]
         );
-        let newsfeedToReturn = [];
-        for (let i = 0; i < allFeeds.length; i++) {
-            const feed = allFeeds[i];
-            const newFeed = new Feed({
-                ...feed,
-                tags: feed.tags || [],
-                mentioned_users: feed.mentioned_users || [],
-            });
-            const { latestComments, next } = await Feed.getLatestComments(
-                feed.id,
-                COMMENT_PAGE_SIZE,
-                user_asking
-            );
-            newFeed.latest_comments = latestComments || [];
-            if (next) {
-                newFeed.comments_next_paging = next;
-            }
-            newFeed.profile_pic_url = User.generatePictureUrl({
-                has_profile: newFeed.user_profile_pic == 1,
-                id: newFeed.user_id,
-            });
-            newFeed.latest_comments = newFeed.latest_comments.map((comment) => {
-                return {
-                    ...comment,
-                    profile_pic_url: User.generatePictureUrl({
-                        has_profile: comment.user_profile_pic == 1,
-                        id: comment.user_id,
-                    }),
-                };
-            });
-            if (newFeed.shared_post_id) {
-                newFeed.shared_post_data = await Post.getSharedData(
-                    newFeed.shared_post_id
-                );
-            }
+        const newsfeedToReturn = [];
+        for (let feed of allFeeds) {
+            const newFeed = await Feed.attachFeedAddData(feed);
             newsfeedToReturn.push(newFeed);
         }
         return newsfeedToReturn;
@@ -248,18 +207,17 @@ class Feed extends Post {
     // get all; no paging
     // does not require already_liked
     static async findByViewer(user_id) {
-        let [allFeeds] = await db.pool.query(
+        let [newsfeedToReturn] = await db.pool.query(
             `select
-            lc.id, lc.user_id, u.username, u.user_profile_pic, 
-            lc.content, unix_timestamp(lc.created_at) as created_at, 
-            lc.audience_type_id, lc.shared_post_id, pts.tags, pmu.mentioned_users, lc.photo_count, lc.like_count, 
-            cc.comment_count, sc.share_count
+                lc.id, lc.user_id, u.username, u.user_profile_pic, 
+                lc.content, unix_timestamp(lc.created_at) as created_at,
+                lc.shared_post_id, lc.like_count, 
+                cc.comment_count, sc.share_count
             from 
             (
             select 
                 post.id, post.user_id, post.content, post.created_at, 
-                post.audience_type_id, post.shared_post_id, post.photo_count, 
-                count(lu.user_id) as like_count
+                post.shared_post_id, count(lu.user_id) as like_count
             from post 
             left join like_user lu on post.id = lu.post_id
             where post.user_id in (select friend_userid from friendship where user_id = ?)
@@ -300,59 +258,27 @@ class Feed extends Post {
             ) as sc on cc.id = sc.id
             join 
             user u on lc.user_id = u.id
-            left join
-            (
-            SELECT pt.post_id AS id, JSON_ARRAYAGG(
-                JSON_OBJECT('tag_name', t.name, 'tag_id', t.id)
-            ) AS tags 
-            FROM post_tag pt
-            JOIN tag t ON pt.tag_id = t.id
-            GROUP BY post_id
-            ) as pts on cc.id = pts.id
-            left join 
-            (
-            SELECT mu.post_id, JSON_ARRAYAGG(
-            JSON_OBJECT
-                (
-                'username', u.username, 
-                'user_profile_pic', u.user_profile_pic,
-                'user_id', u.id
-                )
-            ) AS mentioned_users
-            FROM mention_user mu
-            JOIN user u ON mu.user_id = u.id
-            GROUP BY mu.post_id
-            ) pmu on pmu.post_id = cc.id
             order by lc.created_at DESC
             `,
-            [user_id, user_id, user_id, user_id]
+            [user_id, user_id, user_id]
         );
-        let newsfeedToReturn = [];
-        for (let i = 0; i < allFeeds.length; i++) {
-            const feed = allFeeds[i];
-            const newFeed = new Feed({
-                ...feed,
-                tags: feed.tags || [],
-                mentioned_users: feed.mentioned_users || [],
-            });
-            const { latestComments, next } = await Feed.getLatestComments(
-                feed.id,
-                COMMENT_PAGE_SIZE
-            );
-            newFeed.latest_comments = latestComments || [];
-            if (next) {
-                newFeed.comments_next_paging = next;
-            }
-            newsfeedToReturn.push(newFeed);
-        }
         return newsfeedToReturn;
     }
 
-    static async getFeedDetail(post_id, user_asking) {
-        let [feedDetail] = await db.pool.query(
+    // returns array of feed instances from a given array of post ids
+    static async getFeedsDetail(post_ids, user_asking) {
+        if (!post_ids || post_ids.length === 0) {
+            return null;
+        }
+        let orderByList = "";
+        ["lc.id", ...post_ids].forEach((el) => {
+            orderByList += el + ", ";
+        });
+        orderByList = orderByList.substring(0, orderByList.length - 2);
+        let [allFeeds] = await db.pool.query(
             `select lc.id, lc.user_id, u.username, u.user_profile_pic, 
-            lc.content, unix_timestamp(lc.created_at) as created_at, 
-            lc.audience_type_id, lc.shared_post_id, pts.tags, pmu.mentioned_users, lc.photo_count, lc.like_count, 
+            lc.content, unix_timestamp(lc.created_at) as created_at,
+            lc.shared_post_id, lc.like_count, 
             cc.comment_count, sc.share_count
             ${
                 user_asking
@@ -367,12 +293,12 @@ class Feed extends Post {
             from 
             (
             select 
-                post.id, post.user_id, post.content, post.created_at, 
-                post.audience_type_id, post.shared_post_id, post.photo_count, 
+                post.id, post.user_id, post.content, post.created_at,
+                post.shared_post_id,
                 count(lu.user_id) as like_count
             from post 
             left join like_user lu on post.id = lu.post_id
-            where post.id = ?
+            where post.id in (?)
             group by post.id
             order by post.created_at desc
             ) as lc
@@ -382,7 +308,7 @@ class Feed extends Post {
                 post.id, count(c.id) as comment_count
             from post 
             left join comment c on post.id = c.post_id
-            where post.id = ?
+            where post.id in (?)
             group by post.id
             order by post.created_at desc
             ) as cc on lc.id = cc.id
@@ -390,7 +316,6 @@ class Feed extends Post {
             user u on lc.user_id = u.id
             join 
             (
-
             select 
                 post.id, sc.share_count
             from post 
@@ -407,35 +332,10 @@ class Feed extends Post {
                 count(*) as count from post group by shared_post_id) share_view 
                 on p.id = share_view.shared_post_id
             ) sc on post.id = sc.id
-            where post.id = ?
+            where post.id in (?)
             group by post.id, sc.share_count
             order by post.created_at desc
             ) as sc on cc.id = sc.id
-            left join 
-            (
-            SELECT pt.post_id AS id, JSON_ARRAYAGG(
-                JSON_OBJECT('tag_name', t.name, 'tag_id', t.id)
-            ) AS tags 
-            FROM post_tag pt
-            JOIN tag t ON pt.tag_id = t.id
-            WHERE pt.post_id = ?
-            GROUP BY pt.post_id
-            ) as pts on cc.id = pts.id
-            left join 
-            (
-            SELECT mu.post_id, JSON_ARRAYAGG(
-            JSON_OBJECT
-                (
-                'username', u.username, 
-                'user_profile_pic', u.user_profile_pic,
-                'user_id', u.id
-                )
-            ) AS mentioned_users
-            FROM mention_user mu
-            JOIN user u ON mu.user_id = u.id
-            WHERE mu.post_id = ?
-            GROUP BY mu.post_id
-            ) pmu on pmu.post_id = cc.id
             ${
                 user_asking
                     ? `left join 
@@ -445,53 +345,27 @@ class Feed extends Post {
                         on lc.id = al.post_id`
                     : ""
             }
-            order by created_at DESC
+            order by FIELD(${orderByList})
             `,
             user_asking
-                ? [post_id, post_id, post_id, post_id, post_id, user_asking]
-                : [post_id, post_id, post_id, post_id, post_id]
+                ? [post_ids, post_ids, post_ids, user_asking]
+                : [post_ids, post_ids, post_ids]
         );
-        if (feedDetail.length === 0) {
+        if (allFeeds.length === 0) {
             return null;
         }
-        const { latestComments, next } = await Feed.getLatestComments(
-            post_id,
-            COMMENT_PAGE_SIZE,
-            user_asking
-        );
-        const feed = new Feed({
-            ...feedDetail[0],
-            latest_comments: latestComments || [],
-            tags: feedDetail[0].tags || [],
-            mentioned_users: feedDetail[0].mentioned_users || [],
-        });
-        if (next) {
-            feed.comments_next_paging = next;
+
+        const newsfeedToReturn = [];
+        for (let feed of allFeeds) {
+            const feedDetail = await Feed.attachFeedAddData(feed, user_asking);
+            newsfeedToReturn.push(feedDetail);
         }
-        feed.profile_pic_url = User.generatePictureUrl({
-            has_profile: feed.user_profile_pic == 1,
-            id: feed.user_id,
-        });
-        if (feed.shared_post_id) {
-            feed.shared_post_data = await Post.getSharedData(
-                feed.shared_post_id
-            );
-        }
-        feed.latest_comments = feed.latest_comments.map((c) => {
-            return {
-                ...c,
-                profile_pic_url: User.generatePictureUrl({
-                    has_profile: c.user_profile_pic == 1,
-                    id: c.user_id,
-                }),
-            };
-        });
-        return feed;
+        return newsfeedToReturn;
     }
 
     static async getLatestComments(post_id, comment_count, user_asking) {
         let [latestComments] = await db.pool.query(
-            `select c.post_id, c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
+            `select c.id, c.user_id, c.content, unix_timestamp(c.created_at) as created_at, u.username, u.user_profile_pic, 
             sum(
                 case when lu.user_id is null then 0 else 1 end
             ) as like_count ${
@@ -518,6 +392,15 @@ class Feed extends Post {
                 ? [user_asking, post_id, comment_count + 1]
                 : [post_id, comment_count + 1]
         );
+        latestComments = latestComments.map((comment) => {
+            return {
+                ...comment,
+                profile_pic_url: User.generatePictureUrl({
+                    has_profile: comment.user_profile_pic == 1,
+                    id: comment.user_id,
+                }),
+            };
+        });
         if (latestComments.length > comment_count) {
             return {
                 latestComments: latestComments.slice(
@@ -532,10 +415,5 @@ class Feed extends Post {
         };
     }
 }
-
-// (async () => {
-//     const allComments = await Feed.getLatestComments([2, 3, 4], 1, 2);
-//     console.log(allComments);
-// })();
 
 module.exports = Feed;

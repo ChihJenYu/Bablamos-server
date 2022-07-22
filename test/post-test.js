@@ -17,7 +17,6 @@ describe("Post", () => {
             .set("Authorization", access_token)
             .send({
                 content: "Mocha is not matcha",
-                audience_type_id: 1,
             });
 
         expect(createPostRes.status).to.equal(201);

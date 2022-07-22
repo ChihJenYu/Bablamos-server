@@ -62,11 +62,7 @@ const editPost = async (req, res) => {
     // request body:
     // {
     //     content: "Lorem ipsum",
-    //     audience_type_id: 1, // public
-    //     audience: undefined,
     //     shared_post_id: undefined,
-    //     tags: [{tag_id: 1, tag_name: 'nodejs'}],
-    //     mentioned_users: undefined,
     // }
     const photo_count = req.files ? req.files.length : 0;
     const post_id = req.post_id;
@@ -132,7 +128,7 @@ const getFeedDetail = async (req, res) => {
         res.send({ data: null });
         return;
     }
-    let feedDetail = await Feed.getFeedDetail(postId, userId);
+    let [feedDetail] = await Feed.getFeedsDetail([postId], userId);
     res.send({ data: feedDetail });
 };
 
@@ -140,8 +136,8 @@ const getFeedDetail = async (req, res) => {
 const searchPosts = async (req, res) => {
     const userId = req.user.id;
     let { kw, paging } = req.query;
-    paging = isNaN(+paging) ? 0 : +paging;
-    let searchResult = await search.get(`/${ELASTIC_POST_INDEX}/_search`, {
+    paging = +paging || 0;
+    let searchResults = await search.get(`/${ELASTIC_POST_INDEX}/_search`, {
         data: {
             from: SEARCH_POST_PAGE_SIZE * paging,
             size: SEARCH_POST_PAGE_SIZE,
@@ -159,17 +155,14 @@ const searchPosts = async (req, res) => {
             },
         },
     });
-    searchResult = searchResult.data.hits.hits;
-    let resultsToReturn = [];
-    for (let i = 0; i < searchResult.length; i++) {
-        const result = await Feed.getFeedDetail(
-            searchResult[i]._source.id,
-            userId
-        );
-        if (result) {
-            resultsToReturn.push(result);
-        }
-    }
+    searchResults = searchResults.data.hits.hits;
+    const postIds = searchResults.map((result) => {
+        return result._source.id;
+    });
+    // must order as ordered in postIds
+    const resultsToReturn =
+        postIds.length === 0 ? [] : await Feed.getFeedsDetail(postIds, userId);
+
     res.send({ data: resultsToReturn });
 };
 

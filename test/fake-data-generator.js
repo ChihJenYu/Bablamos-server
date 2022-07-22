@@ -36,7 +36,7 @@ const _createFakeUser = async (conn) => {
 const _createFakePost = async (conn) => {
     await conn.query(
         `INSERT INTO post
-                (user_id, content, audience_type_id, shared_post_id, photo_count)
+                (user_id, content, shared_post_id, photo_count)
                 VALUES ?`,
         [posts.map((post) => Object.values(post))]
     );

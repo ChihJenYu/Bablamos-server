@@ -24,6 +24,7 @@ app.use((err, req, res, next) => {
             res.status(400).send({ error: "File not an image" });
             return;
     }
+    console.log(err);
     res.status(500).send("Internal Server Error");
 });
 
