@@ -17,10 +17,10 @@ class Comment extends Edge {
             edge_type: "comment",
             user_id,
             content,
-            mentioned_users,
             photo_count,
             created_at,
         });
+        this.mentioned_users = mentioned_users || [];
         this.post_id = post_id;
         this.level = level || 1;
         this.replied_comment_id = replied_comment_id || null;

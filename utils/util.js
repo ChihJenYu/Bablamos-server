@@ -5,7 +5,7 @@ const getValueOr = (table, keysArray, or) => {
             value = table[key];
             table = table[key];
         }
-        return value || 0;
+        return value || or;
     } catch (e) {
         return or;
     }
