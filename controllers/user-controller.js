@@ -1,8 +1,6 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
-const Post = require("../models/post");
 const search = require("../apis/search");
-const multerMiddleware = require("../middlewares/multer");
 const redisClient = require("../redis/");
 const { ELASTIC_USER_INDEX, NODE_ENV } = process.env;
 const {
@@ -13,11 +11,10 @@ const newsfeed = require("../apis/newsfeed");
 const NEWSFEED_PER_PAGE_FOR_CLIENT = NODE_ENV === "test" ? 2 : 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 const SEARCH_USER_PAGE_SIZE = 6;
-// let userTempNewsfeedStorage = {};
 
 // type = "native"
 // implement check for duplicate user in model
-const insertNewUser = async (includeProfilePic, type, userData) => {
+const insertNewUser = async (includeProfilePic, userData) => {
     const { username, email, password } = userData;
     if (!username || !email || !password) {
         throw new Error("Missing information");
@@ -29,7 +26,7 @@ const insertNewUser = async (includeProfilePic, type, userData) => {
         include_profile_pic: includeProfilePic ? 1 : 0,
     });
 
-    const id = await user.save(type);
+    const id = await user.save();
 
     const token = user.generateAuthToken(id);
 
@@ -44,8 +41,7 @@ const insertNewUser = async (includeProfilePic, type, userData) => {
     };
 };
 
-// type = "native"
-const regularSignin = async (type, userData) => {
+const regularSignin = async (userData) => {
     const retrievedUser = await User.findByCredentials(userData);
     if (!retrievedUser) {
         throw new Error("Incorrect credentials");
@@ -69,27 +65,8 @@ const regularSignin = async (type, userData) => {
 
 const userSignUp = async (req, res, next) => {
     try {
-        if (req.file) {
-            // includes profile picture
-            const responseBody = await insertNewUser(true, "native", req.body);
-            const newUserId = responseBody.user.id;
-            await s3
-                .upload({
-                    Bucket: AWS_S3_BUCKET_NAME,
-                    Key: `user/${newUserId}/profile.jpg`,
-                    Body: req.file.buffer,
-                })
-                .promise();
-            responseBody.user.profile_pic_url = User.generatePictureUrl({
-                has_profile: true,
-                id: newUserId,
-            });
-            res.status(201).send(responseBody);
-            newsfeed.post(`/user?user-id=${responseBody.user.id}`);
-            return;
-        }
         // no profile picture
-        const responseBody = await insertNewUser(false, "native", req.body);
+        const responseBody = await insertNewUser(false, req.body);
         responseBody.user.profile_pic_url = User.generatePictureUrl({
             has_profile: false,
         });
@@ -117,7 +94,7 @@ const userSignIn = async (req, res, next) => {
         return;
     }
     try {
-        const responseBody = await regularSignin("native", req.body);
+        const responseBody = await regularSignin(req.body);
         res.status(200).send(responseBody);
         return;
     } catch (e) {
