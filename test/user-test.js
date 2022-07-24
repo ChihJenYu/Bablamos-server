@@ -170,7 +170,7 @@ describe("User APIs", () => {
     });
 
     // Get user's index newsfeed
-    it("Get user's index newsfeed", async () => {
+    it("Get user's index newsfeed with paging", async () => {
         const user2 = users[1];
         const user = {
             email: user2.email,
@@ -180,18 +180,29 @@ describe("User APIs", () => {
         const res = await requester.post("/api/user/signin").send(user);
         const { access_token } = res.body;
 
-        const newsfeedResponse = await requester
+        const firstPageNewsfeedResponse = await requester
             .get("/api/user/newsfeed?at=index")
             .set("Authorization", access_token);
+        const secondPageNewsfeedResponse = await requester
+            .get("/api/user/newsfeed?at=index&paging=1")
+            .set("Authorization", access_token);
 
-        const userNewsfeed = newsfeedResponse.body.data;
-        const firstFeedExpect = {
-            user_id: posts[1].user_id,
-            content: posts[1].content,
-            shared_post_id: posts[1].shared_post_id,
+        const firstPageUserNewsfeed = firstPageNewsfeedResponse.body.data;
+        const secondPageUserNewsfeed = secondPageNewsfeedResponse.body.data;
+
+        const firstPageFeedExpect = {
+            user_id: posts[4].user_id,
+            content: posts[4].content,
+            shared_post_id: posts[4].shared_post_id,
         };
-        expect(userNewsfeed).to.have.lengthOf(2);
-        expect(userNewsfeed[0]).to.have.all.keys([
+        const secondPageFeedExpect = {
+            user_id: posts[2].user_id,
+            content: posts[2].content,
+            shared_post_id: posts[2].shared_post_id,
+        };
+        expect(firstPageUserNewsfeed).to.have.lengthOf(2);
+        expect(secondPageUserNewsfeed).to.have.lengthOf(2);
+        expect(firstPageUserNewsfeed[0]).to.have.all.keys([
             "id",
             "edge_type_id",
             "user_id",
@@ -208,9 +219,29 @@ describe("User APIs", () => {
             "already_liked",
             "profile_pic_url",
         ]);
-        expect(userNewsfeed[0])
+        expect(secondPageUserNewsfeed[0]).to.have.all.keys([
+            "id",
+            "edge_type_id",
+            "user_id",
+            "content",
+            "photo_count",
+            "created_at",
+            "shared_post_id",
+            "username",
+            "like_count",
+            "comment_count",
+            "share_count",
+            "latest_comments",
+            "user_profile_pic",
+            "already_liked",
+            "profile_pic_url",
+        ]);
+        expect(firstPageUserNewsfeed[0])
             .to.be.an("object")
-            .that.includes(firstFeedExpect);
+            .that.includes(firstPageFeedExpect);
+        expect(secondPageUserNewsfeed[0])
+            .to.be.an("object")
+            .that.includes(secondPageFeedExpect);
     });
 
     // Edit user profile

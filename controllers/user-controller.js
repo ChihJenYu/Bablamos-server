@@ -3,17 +3,17 @@ const Feed = require("../models/feed");
 const Post = require("../models/post");
 const search = require("../apis/search");
 const multerMiddleware = require("../middlewares/multer");
-const { ELASTIC_USER_INDEX } = process.env;
+const redisClient = require("../redis/");
+const { ELASTIC_USER_INDEX, NODE_ENV } = process.env;
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
 } = require("../mq/");
-const redisClient = require("../redis");
 const newsfeed = require("../apis/newsfeed");
-const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
+const NEWSFEED_PER_PAGE_FOR_CLIENT = NODE_ENV === "test" ? 2 : 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
 const SEARCH_USER_PAGE_SIZE = 6;
-let userTempNewsfeedStorage = {};
+// let userTempNewsfeedStorage = {};
 
 // type = "native"
 // implement check for duplicate user in model
@@ -195,20 +195,35 @@ const editUserProfile = async (req, res) => {
 
 // /user/newsfeed?at=index&paging=0&username= (username query is required if at == profile)
 // returns an array of Feed objects
+// redis key for individual users' fetched feeds: newsfeed_storage_user_X
+// redis key for tracking starting index of user's newsfeed_storage: start_index_for_temp_storage_user_X
 const getNewsfeed = async (req, res) => {
     const { at: whichPage, id: userInQuestion } = req.query;
     const paging = +req.query.paging || 0;
     const { id: userAsking } = req.user;
 
     if (whichPage === "index") {
-        // initialization
-        if (!userTempNewsfeedStorage[userAsking] || paging === 0) {
-            userTempNewsfeedStorage[userAsking] = [];
+        let initialized = false;
+        const userNewsfeedStorageJSON = await redisClient.get(
+            "newsfeed_storage_user_" + userAsking
+        );
+        if (!userNewsfeedStorageJSON || paging === 0) {
             await redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
+                "start_index_for_temp_storage_user_" + userAsking,
                 0
             );
+            initialized = true;
         }
+        let userNewsfeedStorageParsed = userNewsfeedStorageJSON
+            ? JSON.parse(userNewsfeedStorageJSON)
+            : [];
+        // if (!userTempNewsfeedStorage[userAsking] || paging === 0) {
+        //     userTempNewsfeedStorage[userAsking] = [];
+        //     await redisClient.set(
+        //         "start_index_for_temp_storage_user_" + userAsking,
+        //         0
+        //     );
+        // }
 
         // the portion in MongoDB that user wants to see
         const requestedStartIndex = paging * NEWSFEED_PER_PAGE_FOR_CLIENT;
@@ -218,16 +233,22 @@ const getNewsfeed = async (req, res) => {
             1;
 
         // the portion in temp storage that server has cached
-        let NFGSStartIndex = await redisClient.get(
-            "NFGS_start_index_for_temp_storage_user_" + userAsking
-        );
+        let NFGSStartIndex = initialized
+            ? 0
+            : await redisClient.get(
+                  "start_index_for_temp_storage_user_" + userAsking
+              );
         NFGSStartIndex = +NFGSStartIndex;
         NFGSEndIndex = NFGSStartIndex + NEWSFEED_PER_PAGE_FOR_WEB_SERVER - 1;
 
         // issue: localIndex could be negative
         const localIndexToStart = requestedStartIndex - NFGSStartIndex;
         const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
-        let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
+        // let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
+        //     localIndexToStart,
+        //     localIndexToEnd + 1
+        // );
+        let newsfeedToReturn = userNewsfeedStorageParsed.slice(
             localIndexToStart,
             localIndexToEnd + 1
         );
@@ -236,23 +257,31 @@ const getNewsfeed = async (req, res) => {
             const { data } = await newsfeed.get(
                 `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
-            userTempNewsfeedStorage[userAsking] = data.data;
-            newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
-                0,
-                NEWSFEED_PER_PAGE_FOR_CLIENT
+            // userTempNewsfeedStorage[userAsking] = data.data;
+            newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
+            // userTempNewsfeedStorage[userAsking] = data.data;
+            const newNewsfeedStorageJSON = JSON.stringify(data.data);
+            redisClient.set(
+                "newsfeed_storage_user_" + userAsking,
+                newNewsfeedStorageJSON
             );
             redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
+                "start_index_for_temp_storage_user_" + userAsking,
                 requestedStartIndex
             );
         } else if (newsfeedToReturn.length < NEWSFEED_PER_PAGE_FOR_CLIENT) {
             const { data } = await newsfeed.get(
                 `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
-            userTempNewsfeedStorage[userAsking] = data.data;
+            // userTempNewsfeedStorage[userAsking] = data.data;
             newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
+            const newNewsfeedStorageJSON = JSON.stringify(data.data);
             redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
+                "newsfeed_storage_user_" + userAsking,
+                newNewsfeedStorageJSON
+            );
+            redisClient.set(
+                "start_index_for_temp_storage_user_" + userAsking,
                 requestedStartIndex
             );
         }
@@ -261,7 +290,6 @@ const getNewsfeed = async (req, res) => {
         const postIds = newsfeedToReturn.map((nf) => {
             return nf.post_id;
         });
-        // must order as ordered in postIds
         newsfeedToReturn =
             postIds.length === 0
                 ? []

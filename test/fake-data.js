@@ -32,6 +32,24 @@ const posts = [
         shared_post_id: null,
         photo_count: 0,
     },
+    {
+        user_id: 1,
+        content: "Test 3",
+        shared_post_id: null,
+        photo_count: 0,
+    },
+    {
+        user_id: 1,
+        content: "Test 4",
+        shared_post_id: null,
+        photo_count: 0,
+    },
+    {
+        user_id: 1,
+        content: "Test 5",
+        shared_post_id: null,
+        photo_count: 0,
+    },
 ];
 
 module.exports = {
