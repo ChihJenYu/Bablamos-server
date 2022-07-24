@@ -204,7 +204,7 @@ const getNewsfeed = async (req, res) => {
 
     if (whichPage === "index") {
         let initialized = false;
-        const userNewsfeedStorageJSON = await redisClient.get(
+        let userNewsfeedStorageJSON = await redisClient.get(
             "newsfeed_storage_user_" + userAsking
         );
         if (!userNewsfeedStorageJSON || paging === 0) {
@@ -212,6 +212,7 @@ const getNewsfeed = async (req, res) => {
                 "start_index_for_temp_storage_user_" + userAsking,
                 0
             );
+            userNewsfeedStorageJSON = null;
             initialized = true;
         }
         let userNewsfeedStorageParsed = userNewsfeedStorageJSON
@@ -241,13 +242,8 @@ const getNewsfeed = async (req, res) => {
         NFGSStartIndex = +NFGSStartIndex;
         NFGSEndIndex = NFGSStartIndex + NEWSFEED_PER_PAGE_FOR_WEB_SERVER - 1;
 
-        // issue: localIndex could be negative
         const localIndexToStart = requestedStartIndex - NFGSStartIndex;
         const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
-        // let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
-        //     localIndexToStart,
-        //     localIndexToEnd + 1
-        // );
         let newsfeedToReturn = userNewsfeedStorageParsed.slice(
             localIndexToStart,
             localIndexToEnd + 1
