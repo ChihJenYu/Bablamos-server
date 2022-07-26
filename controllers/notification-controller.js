@@ -1,7 +1,7 @@
 const Notification = require("../models/notification");
 
 const getNotification = async (req, res) => {
-    const user_id = req.user.id;
+    const { id: user_id } = req.user;
     const paging = +req.query.paging || 0;
     const notifications = await Notification.find({
         user_id,
@@ -16,8 +16,8 @@ const getUnreadNotificationCount = async (req, res) => {
 };
 
 const readNotification = async (req, res) => {
-    const user_id = req.user.id;
-    const notification_id = req.query.id;
+    const { id: user_id } = req.user;
+    const { id: notification_id } = req.query;
     await Notification.read({ user_id, notification_id });
     res.sendStatus(200);
 };

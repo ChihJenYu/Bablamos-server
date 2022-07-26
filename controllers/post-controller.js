@@ -1,10 +1,8 @@
 const Post = require("../models/post");
 const Feed = require("../models/feed");
-const { ELASTIC_POST_INDEX } = process.env;
-const SEARCH_POST_PAGE_SIZE = 8;
 const UPDATE_METHOD = "write";
 const newsfeed = require("../apis/newsfeed");
-const search = require("../apis/search");
+const { elasticSearchPosts } = require("../apis/search");
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
@@ -22,11 +20,7 @@ const createPost = async (req, res) => {
     // fan-out write
     // call NFGS to update all newsfeeds of all followers of this user
     newsfeed.post(
-        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${
-            newPost.id
-        }&created-at=${newPost.created_at}&edge-type=${
-            newPost.shared_post_id ? "share" : "create"
-        }`
+        `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${newPost.id}&created-at=${newPost.created_at}`
     );
 
     if (newPost.shared_post_id) {
@@ -36,7 +30,7 @@ const createPost = async (req, res) => {
             type: "share",
         });
 
-        // publish notification to shared_post_user
+        // publish notification to author of shared post
         notificationDispatcherJobQueue.add({
             function: "pushNotification",
             type: 7,
@@ -58,14 +52,8 @@ const createPost = async (req, res) => {
 };
 
 const editPost = async (req, res) => {
-    // request query: post-id
-    // request body:
-    // {
-    //     content: "Lorem ipsum",
-    //     shared_post_id: undefined,
-    // }
-    const photo_count = req.files ? req.files.length : 0;
-    const post_id = req.post_id;
+    const photo_count = req.files?.length || 0;
+    const { post_id } = req;
     const { id: user_id } = req.user;
     const postData = req.body;
     const newPost = new Post({
@@ -82,18 +70,13 @@ const editPost = async (req, res) => {
 };
 
 const deletePost = async (req, res) => {
-    const user_id = req.user.id;
-    const post_id = req.post_id;
+    const { id: user_id } = req.user;
+    const { post_id } = req;
     const deletedPost = await Post.delete(post_id);
 
     res.status(200).send({ id: post_id });
 
-    console.log(
-        "Post deleted in database; Calling newsfeed generation service..."
-    );
-
     // locate and delete edge in each follower's feed list
-    const UPDATE_METHOD = "write";
     newsfeed.delete(
         `/update?method=${UPDATE_METHOD}&user-id=${user_id}&post-id=${post_id}`
     );
@@ -122,7 +105,7 @@ const deletePost = async (req, res) => {
 };
 
 const getFeedDetail = async (req, res) => {
-    const userId = req.user.id;
+    const { id: userId } = req.user;
     const postId = +req.query["post-id"];
     if (isNaN(postId)) {
         res.send({ data: null });
@@ -134,32 +117,10 @@ const getFeedDetail = async (req, res) => {
 
 // /post/search?kw=&paging=
 const searchPosts = async (req, res) => {
-    const userId = req.user.id;
+    const { id: userId } = req.user;
     let { kw, paging } = req.query;
     paging = +paging || 0;
-    let searchResults = await search.get(`/${ELASTIC_POST_INDEX}/_search`, {
-        data: {
-            from: SEARCH_POST_PAGE_SIZE * paging,
-            size: SEARCH_POST_PAGE_SIZE,
-            query: {
-                function_score: {
-                    query: {
-                        multi_match: {
-                            query: kw,
-                            fields: ["content^2", "username"],
-                            fuzziness: 1,
-                            minimum_should_match: "3<-20%",
-                        },
-                    },
-                },
-            },
-        },
-    });
-    searchResults = searchResults.data.hits.hits;
-    const postIds = searchResults.map((result) => {
-        return result._source.id;
-    });
-    // must order as ordered in postIds
+    const postIds = await elasticSearchPosts(kw, paging);
     const resultsToReturn =
         postIds.length === 0 ? [] : await Feed.getFeedsDetail(postIds, userId);
 
