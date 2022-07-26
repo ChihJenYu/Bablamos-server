@@ -6,7 +6,6 @@ class Comment extends Edge {
         post_id,
         user_id,
         content,
-        level, // 1 if not specified
         replied_comment_id, // optional
         mentioned_users, // array; optional,
         photo_count, // default 0
@@ -17,12 +16,11 @@ class Comment extends Edge {
             edge_type: "comment",
             user_id,
             content,
-            mentioned_users,
             photo_count,
             created_at,
         });
+        this.mentioned_users = mentioned_users || [];
         this.post_id = post_id;
-        this.level = level || 1;
         this.replied_comment_id = replied_comment_id || null;
     }
 
@@ -92,14 +90,13 @@ class Comment extends Edge {
             } else {
                 const [{ insertId: comment_id }] = await conn.query(
                     `INSERT INTO comment
-            (post_id, user_id, content, photo_count, level, replied_comment_id)
-            VALUES (?, ?, ?, ?, ?, ?)`,
+            (post_id, user_id, content, photo_count, replied_comment_id)
+            VALUES (?, ?, ?, ?, ?)`,
                     [
                         this.post_id,
                         this.user_id,
                         this.content,
                         this.photo_count,
-                        this.level,
                         this.replied_comment_id,
                     ]
                 );

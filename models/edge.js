@@ -13,7 +13,6 @@ class Edge {
         edge_type,
         user_id,
         content,
-        mentioned_users,
         photo_count,
         created_at,
     }) {
@@ -21,7 +20,6 @@ class Edge {
         this.edge_type_id = edgeTypes[edge_type]; // required
         this.user_id = user_id; // required
         this.content = content; // required
-        this.mentioned_users = mentioned_users || [];
         this.photo_count = photo_count || 0;
         this.created_at = created_at || null;
     }

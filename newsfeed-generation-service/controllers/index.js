@@ -59,6 +59,7 @@ const getNewsfeed = async (req, res) => {
                 $slice: [from, NEWSFEED_PER_PAGE_FOR_WEB_SERVER],
             },
             affinity: 0,
+            affinity_with_self: 0,
         }
     );
     if (!user) {
@@ -91,14 +92,6 @@ const updateNewsfeed = async (req, res) => {
             const timestampStart = Date.now();
 
             let affinityWithSelf = {};
-            // get affinity_with_self from redis
-            // const affinityWithSelfJSON = await redisClient.get(
-            //     `affinity_with_self_user_${userId}`
-            // );
-            // if (affinityWithSelfJSON) {
-            //     affinityWithSelf = JSON.parse(affinityWithSelfJSON);
-            // } else {
-            // if not exist, get from mongo
             const posterObj = await User.findOne(
                 { user_id: userId },
                 { affinity_with_self: 1 }
@@ -108,11 +101,6 @@ const updateNewsfeed = async (req, res) => {
                 posterObj.affinity_with_self.forEach((user) => {
                     affinityWithSelf[user.user_id] = user.affinity_with_self;
                 });
-                // write affinity_with_self to redis
-                // redisClient.set(
-                //     `affinity_with_self_user_${userId}`,
-                //     JSON.stringify(affinityWithSelf)
-                // );
             }
             // }
             const bulkWrites = [];
@@ -208,41 +196,49 @@ const recalcNewsfeed = async (req, res) => {
         res.sendStatus(200);
         return;
     }
-    for (let readPost of readPostIds) {
-        // increment view count and decrease edge rank score
-        await User.updateOne(
-            { user_id: userId, "newsfeed.post_id": readPost },
-            {
+    const updates = [];
+    updates.push({
+        updateOne: {
+            filter: { user_id: userId },
+            update: {
                 $inc: {
-                    "newsfeed.$.views": 1,
+                    "newsfeed.$[elem].views": 1,
                 },
                 $mul: {
-                    "newsfeed.$.edge_rank_score": 1 / +ALREADY_SEEN_BASE,
+                    "newsfeed.$[elem].edge_rank_score": 1 / +ALREADY_SEEN_BASE,
                 },
                 $set: {
-                    "newsfeed.$.is_new": false,
+                    "newsfeed.$[elem].is_new": false,
                 },
                 $set: {
-                    "newsfeed.$.fresh_pop_buff": 0
-                }
-            }
-        );
-    }
-
-    // reorder
-    await User.updateOne(
-        { user_id: userId },
-        {
-            $push: {
-                newsfeed: {
-                    $each: [],
-                    $sort: {
-                        edge_rank_score: -1,
+                    "newsfeed.$[elem].fresh_pop_buff": 0,
+                },
+            },
+            arrayFilters: [
+                {
+                    "elem.post_id": {
+                        $in: readPostIds,
+                    },
+                },
+            ],
+        },
+    });
+    updates.push({
+        updateOne: {
+            filter: { user_id: userId },
+            update: {
+                $push: {
+                    newsfeed: {
+                        $each: [],
+                        $sort: {
+                            edge_rank_score: -1,
+                        },
                     },
                 },
             },
-        }
-    );
+        },
+    });
+    await User.bulkWrite(updates);
 
     console.log(
         `View count update complete; took ${Date.now() - timestampStart}ms`

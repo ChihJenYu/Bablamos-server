@@ -1,9 +1,11 @@
+const { NODE_ENV, DBHOST, DBUSER, DBPASSWORD, DATABASE, TEST_DATABASE } =
+    process.env;
 const mysql = require("mysql2/promise");
 const pool = mysql.createPool({
-    host: process.env.DBHOST,
-    user: process.env.DBUSER,
-    password: process.env.DBPASSWORD,
-    database: process.env.DATABASE,
+    host: DBHOST,
+    user: DBUSER,
+    password: DBPASSWORD,
+    database: NODE_ENV === "test" ? TEST_DATABASE : DATABASE,
     multipleStatements: true,
 });
 

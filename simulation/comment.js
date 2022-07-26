@@ -31,7 +31,6 @@ const randomComment = async () => {
         `${MY_HOST}/comment?post-id=${randomPost.id}`,
         {
             content: randomComment,
-            level: 1,
             mentioned_users: [],
         },
         {

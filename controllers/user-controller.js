@@ -1,38 +1,24 @@
 const User = require("../models/user");
 const Feed = require("../models/feed");
-const Post = require("../models/post");
-const search = require("../apis/search");
-const { ELASTIC_USER_INDEX } = process.env;
+const { elasticSearchUsers } = require("../apis/search");
+const redisClient = require("../redis/");
+const { NODE_ENV } = process.env;
 const {
     popularityCalculatorJobQueue,
     notificationDispatcherJobQueue,
 } = require("../mq/");
-const redisClient = require("../redis");
 const newsfeed = require("../apis/newsfeed");
-const aws = require("aws-sdk");
-const NEWSFEED_PER_PAGE_FOR_CLIENT = 8;
+const NEWSFEED_PER_PAGE_FOR_CLIENT = NODE_ENV === "test" ? 2 : 8;
 const NEWSFEED_PER_PAGE_FOR_WEB_SERVER = 100;
-const SEARCH_USER_PAGE_SIZE = 6;
-let userTempNewsfeedStorage = {};
 
-// type = "native"
-// implement check for duplicate user in model
-const insertNewUser = async (includeProfilePic, type, userData) => {
+const insertNewUser = async (userData) => {
     const { username, email, password } = userData;
     if (!username || !email || !password) {
         throw new Error("Missing information");
     }
-    let user = new User({
-        username,
-        email,
-        password,
-        include_profile_pic: includeProfilePic ? 1 : 0,
-    });
-
-    const id = await user.save(type);
-
+    let user = new User(userData);
+    const id = await user.save();
     const token = user.generateAuthToken(id);
-
     return {
         access_token: token.token,
         access_expired: token.expire,
@@ -40,19 +26,16 @@ const insertNewUser = async (includeProfilePic, type, userData) => {
             id,
             username: user.username,
             email: user.email,
-            // allow_stranger_follow?
         },
     };
 };
 
-// type = "native"
-const regularSignin = async (type, userData) => {
+const regularSignin = async (userData) => {
     const retrievedUser = await User.findByCredentials(userData);
     if (!retrievedUser) {
-        throw new Error("User not found");
+        throw new Error("Incorrect credentials");
     }
-    const { id, username, email, user_profile_pic, allow_stranger_follow } =
-        retrievedUser;
+    const { id, username, email, user_profile_pic } = retrievedUser;
     const token = User.staticGenerateAuthToken(retrievedUser);
     return {
         access_token: token.token,
@@ -65,63 +48,49 @@ const regularSignin = async (type, userData) => {
                 has_profile: user_profile_pic == 1,
                 id,
             }),
-            // allow_stranger_follow?
         },
     };
 };
 
-const userSignUp = async (req, res) => {
+const userSignUp = async (req, res, next) => {
     try {
-        if (req.file) {
-            // includes profile picture
-            const responseBody = await insertNewUser(true, "native", req.body);
-            const newUserId = responseBody.user.id;
-            const s3 = new aws.S3({
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-            });
-            await s3
-                .upload({
-                    Bucket: process.env.AWS_S3_BUCKET_NAME,
-                    Key: `user/${newUserId}/profile.jpg`,
-                    Body: req.file.buffer,
-                })
-                .promise();
-            responseBody.user.profile_pic_url = User.generatePictureUrl({
-                has_profile: true,
-                id: newUserId,
-            });
-            res.status(201).send(responseBody);
-            newsfeed.post(`/user?user-id=${responseBody.user.id}`);
-        } else {
-            // no profile picture
-            const responseBody = await insertNewUser(false, "native", req.body);
-            responseBody.user.profile_pic_url = User.generatePictureUrl({
-                has_profile: false,
-            });
-            res.status(201).send(responseBody);
-            newsfeed.post(`/user?user-id=${responseBody.user.id}`);
-        }
-    } catch (e) {
-        console.log(e);
-        res.status(400).send({ error: e.message });
+        const responseBody = await insertNewUser(req.body);
+        responseBody.user.profile_pic_url = User.generatePictureUrl({
+            has_profile: false,
+        });
+        res.status(201).send(responseBody);
+        newsfeed.post(`/user?user-id=${responseBody.user.id}`);
         return;
+    } catch (e) {
+        if (e.message === "Missing information") {
+            res.status(400).send({ error: e.message });
+            return;
+        }
+        if (e.message.includes("Duplicate entry")) {
+            res.status(400).send({
+                error: "Username or email is already used",
+            });
+            return;
+        }
+        next(e);
     }
 };
 
-const userSignIn = async (req, res) => {
+const userSignIn = async (req, res, next) => {
     if (!req.is("application/json")) {
         res.status(400).send({ error: "Wrong content type" });
         return;
     }
     try {
-        const responseBody = await regularSignin("native", req.body);
+        const responseBody = await regularSignin(req.body);
         res.status(200).send(responseBody);
         return;
     } catch (e) {
-        console.log(e);
-        res.status(400).send({ error: e.message });
-        return;
+        if (e.message === "Incorrect credentials") {
+            res.status(403).send({ error: e.message });
+            return;
+        }
+        next(e);
     }
 };
 
@@ -130,56 +99,43 @@ const userSignOut = async (req, res) => {
 };
 
 const editUserProfile = async (req, res) => {
-    const { id: userId, username, email, allow_stranger_follow } = req.user;
+    const { id: user_id, username, email, allow_stranger_follow } = req.user;
     if (req.body.allow_stranger_follow || req.body.info) {
-        const user = new User({ id: userId });
+        const user = new User({ id: user_id });
         await user.save(req.body);
         res.sendStatus(200);
         return;
     }
     if (req.files) {
-        let profilePicChanged;
-        let coverPicChanged;
-        const s3 = new aws.S3({
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        });
+        let profilePicChanged = false;
+        let coverPicChanged = false;
         if (req.files["profile-pic"]) {
-            profilePicChanged = 1;
-            await s3
-                .putObject({
-                    Bucket: process.env.AWS_S3_BUCKET_NAME,
-                    Key: `user/${userId}/profile.jpg`,
-                    Body: req.files["profile-pic"][0].buffer,
-                    CacheControl: "no-cache",
-                    Expires: new Date(),
-                })
-                .promise();
+            profilePicChanged = true;
+            await User.uploadToS3({
+                user_id,
+                buffer: req.files["profile-pic"][0].buffer,
+                which: "profile",
+            });
         }
         if (req.files["cover-pic"]) {
-            coverPicChanged = 1;
-            await s3
-                .putObject({
-                    Bucket: process.env.AWS_S3_BUCKET_NAME,
-                    Key: `user/${userId}/cover.jpg`,
-                    Body: req.files["cover-pic"][0].buffer,
-                    CacheControl: "no-cache",
-                    Expires: new Date(),
-                })
-                .promise();
+            coverPicChanged = true;
+            await User.uploadToS3({
+                user_id,
+                buffer: req.files["cover-pic"][0].buffer,
+                which: "cover",
+            });
         }
-        const user = new User({ id: userId });
-        let updateArgs = {};
-        let responseBody = {};
-        // change user's jwt token for updated profile_pic_url
+        const user = new User({ id: user_id });
+        const updateArgs = {};
+        const responseBody = {};
         if (profilePicChanged) {
             updateArgs.user_profile_pic = 1;
             responseBody.profile_pic_url = User.generatePictureUrl({
                 has_profile: true,
-                id: userId,
+                id: user_id,
             });
             responseBody.access_token = User.staticGenerateAuthToken({
-                id: userId,
+                id: user_id,
                 username,
                 email,
                 user_profile_pic: 1,
@@ -190,7 +146,7 @@ const editUserProfile = async (req, res) => {
             updateArgs.user_cover_pic = 1;
             responseBody.cover_pic_url = User.generateCoverUrl({
                 has_cover: true,
-                id: userId,
+                id: user_id,
             });
         }
         await user.save(updateArgs);
@@ -202,81 +158,83 @@ const editUserProfile = async (req, res) => {
 };
 
 // /user/newsfeed?at=index&paging=0&username= (username query is required if at == profile)
-// returns an array of parsed Feed objects
+// returns an array of Feed objects
+// redis key for individual users' fetched feeds: newsfeed_storage_user_X
+// redis key for tracking starting index of user's newsfeed_storage: start_index_for_temp_storage_user_X
 const getNewsfeed = async (req, res) => {
-    const whichPage = req.query.at;
+    const { at: whichPage, id: userInQuestion } = req.query;
     const paging = +req.query.paging || 0;
-    const userAsking = req.user.id;
-    const userInQuestion = req.query.id;
+    const { id: userAsking } = req.user;
 
     if (whichPage === "index") {
-        // initialization
-        if (!userTempNewsfeedStorage[userAsking] || paging === 0) {
-            userTempNewsfeedStorage[userAsking] = [];
+        let initialized = false;
+        let userNewsfeedStorageJSON = await redisClient.get(
+            "newsfeed_storage_user_" + userAsking
+        );
+        if (!userNewsfeedStorageJSON || paging === 0) {
             await redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
+                "start_index_for_temp_storage_user_" + userAsking,
                 0
             );
+            userNewsfeedStorageJSON = null;
+            initialized = true;
         }
+        let userNewsfeedStorageParsed = userNewsfeedStorageJSON
+            ? JSON.parse(userNewsfeedStorageJSON)
+            : [];
 
+        // the portion in MongoDB that user wants to see
         const requestedStartIndex = paging * NEWSFEED_PER_PAGE_FOR_CLIENT;
         const requestedEndIndex =
             paging * NEWSFEED_PER_PAGE_FOR_CLIENT +
             NEWSFEED_PER_PAGE_FOR_CLIENT -
             1;
 
-        let NFGSStartIndex = await redisClient.get(
-            "NFGS_start_index_for_temp_storage_user_" + userAsking
-        );
+        // the portion that server has cached
+        let NFGSStartIndex = initialized
+            ? 0
+            : await redisClient.get(
+                  "start_index_for_temp_storage_user_" + userAsking
+              );
         NFGSStartIndex = +NFGSStartIndex;
         NFGSEndIndex = NFGSStartIndex + NEWSFEED_PER_PAGE_FOR_WEB_SERVER - 1;
 
-        // issue: localIndex could be negative
+        // the starting and ending indices of cached newsfeed that is requested
         const localIndexToStart = requestedStartIndex - NFGSStartIndex;
         const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
-        let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
+
+        let newsfeedToReturn = userNewsfeedStorageParsed.slice(
             localIndexToStart,
             localIndexToEnd + 1
         );
 
-        // not within range
-        if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
+        // needs to get feed from NFGS
+        if (
+            localIndexToEnd <= 0 ||
+            newsfeedToReturn.length !== NEWSFEED_PER_PAGE_FOR_CLIENT
+        ) {
             const { data } = await newsfeed.get(
                 `?user-id=${userAsking}&from=${requestedStartIndex}`
             );
-
-            userTempNewsfeedStorage[userAsking] = data.data;
-            newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
-                0,
-                NEWSFEED_PER_PAGE_FOR_CLIENT
-            );
-            redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
-                requestedStartIndex
-            );
-        } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
-        } else {
-            const { data } = await newsfeed.get(
-                `?user-id=${userAsking}&from=${requestedStartIndex}`
-            );
-
-            userTempNewsfeedStorage[userAsking] = data.data;
             newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
+            const newNewsfeedStorageJSON = JSON.stringify(data.data);
             redisClient.set(
-                "NFGS_start_index_for_temp_storage_user_" + userAsking,
+                "newsfeed_storage_user_" + userAsking,
+                newNewsfeedStorageJSON
+            );
+            redisClient.set(
+                "start_index_for_temp_storage_user_" + userAsking,
                 requestedStartIndex
             );
         }
-
         // add author profile_pic_url and commentor
-        for (let i = 0; i < newsfeedToReturn.length; i++) {
-            const feedId = newsfeedToReturn[i].post_id;
-            const feedContent = await Feed.getFeedDetail(feedId, userAsking);
-            if (!feedContent) {
-                continue;
-            }
-            newsfeedToReturn[i] = feedContent;
-        }
+        const postIds = newsfeedToReturn.map((nf) => {
+            return nf.post_id;
+        });
+        newsfeedToReturn =
+            postIds.length === 0
+                ? []
+                : await Feed.getFeedsDetail(postIds, userAsking);
         res.send({ data: newsfeedToReturn });
     } else if (whichPage === "profile") {
         if (!userInQuestion) {
@@ -285,7 +243,7 @@ const getNewsfeed = async (req, res) => {
         }
 
         // feed audience list must include req.user.id
-        let newsfeedToReturn = await Feed.findByAuthorId(
+        const newsfeedToReturn = await Feed.findByAuthorId(
             userInQuestion,
             userAsking,
             paging
@@ -294,21 +252,19 @@ const getNewsfeed = async (req, res) => {
     }
 };
 
-// /user/info?at=index&username= (username query is required if at == profile)
 const getUserInfo = async (req, res) => {
-    const userAsking = req.user.id;
-    const whichPage = req.query.at;
-    const usernameInQuestion = req.query.username;
+    const { at: whichPage, username: usernameInQuestion } = req.query;
     if (whichPage === "index") {
-        const { id: userAsking, username, profile_pic_url } = req.user;
+        const { id: user_id, username, profile_pic_url } = req.user;
         res.send({
             data: {
-                user_id: userAsking,
+                user_id,
                 username,
                 profile_pic_url,
             },
         });
     } else if (whichPage === "profile") {
+        const { id: userAsking } = req.user;
         if (!usernameInQuestion) {
             res.status(400).send({ error: "Missing information" });
             return;
@@ -322,14 +278,11 @@ const getUserInfo = async (req, res) => {
             return;
         }
         const userInQuestion = userPacket.id;
-
-        // res.send({user_info: "", profile_pic_url: req.user.profile_pic_url, friend_count: 0, recent_friends: []})
         const recent_friends = await User.findFriends(
             true,
             { user_id: userInQuestion, status: "accepted" },
             0
         );
-
         let {
             user_info,
             username,
@@ -344,7 +297,7 @@ const getUserInfo = async (req, res) => {
             user_in_question: userInQuestion,
         });
 
-        if (userAsking == userInQuestion) {
+        if (userAsking === userInQuestion) {
             friend_status = "self";
         } else if (friend_status == null) {
             friend_status = "stranger";
@@ -362,7 +315,7 @@ const getUserInfo = async (req, res) => {
                 has_cover: user_cover_pic == 1,
                 id: userInQuestion,
             }),
-            friend_count,
+            friend_count: +friend_count,
             recent_friends,
             friend_status,
             follow_status,
@@ -373,15 +326,14 @@ const getUserInfo = async (req, res) => {
 };
 
 // request body contains {edge_id, edge_type}
-// after each like changes, send 'checkLikeCount' job to affinityCalculatorJobQueue
 const userLikesEdge = async (req, res) => {
-    const id = req.user.id;
+    const { id: user_id } = req.user;
     const { post_id, comment_id } = req.body;
     if (req.method === "POST") {
         // like
         await User.like({
             type: "like",
-            user_id: id,
+            user_id,
             post_id,
             comment_id,
         });
@@ -389,7 +341,7 @@ const userLikesEdge = async (req, res) => {
     } else if (req.method === "DELETE") {
         await User.like({
             type: "unlike",
-            user_id: id,
+            user_id,
             post_id,
             comment_id,
         });
@@ -409,7 +361,9 @@ const getUserFriends = async (req, res) => {
     let { id: userInQuestion, status, paging, kw, type } = req.query;
     paging = +paging || 0;
     userInQuestion = +userInQuestion;
-    const userAsking = req.user.id;
+    const { id: userAsking } = req.user;
+
+    // trying to get other users' friend requests
     if (userAsking !== userInQuestion && status !== "accepted") {
         res.status(403).send({ error: "Not authorized" });
         return;
@@ -429,48 +383,14 @@ const getUserFriends = async (req, res) => {
 };
 
 // /user/search?type=&kw=&paging=
-// type: ["simple", "detail"]
 const searchUsers = async (req, res) => {
-    let { type, kw, paging } = req.query;
-    paging = isNaN(+paging) ? 0 : +paging;
-    const searchCriteria =
-        type === "simple"
-            ? {
-                  match_phrase_prefix: {
-                      username: {
-                          query: kw,
-                      },
-                  },
-              }
-            : {
-                  match: {
-                      username: {
-                          query: kw,
-                          fuzziness: 1,
-                      },
-                  },
-              };
-    let searchResult = await search.get(`/${ELASTIC_USER_INDEX}/_search`, {
-        data: {
-            from: SEARCH_USER_PAGE_SIZE * paging,
-            size: SEARCH_USER_PAGE_SIZE,
-            query: searchCriteria,
-        },
-    });
-    searchResult = searchResult.data.hits.hits.map((res) => ({
-        index: "user",
-        user_id: res._source.id,
-        username: res._source.username,
-        profile_pic_url: User.generatePictureUrl({
-            has_profile: res._source.user_profile_pic === 1,
-            id: res._source.id,
-        }),
-    }));
-    res.send({ data: searchResult });
+    const { type, kw } = req.query;
+    const paging = +req.query.paging || 0;
+    res.send({ data: await elasticSearchUsers(type, kw, paging) });
 };
 
 const userBefriends = async (req, res) => {
-    const outgoing_user_id = req.user.id;
+    const { id: outgoing_user_id } = req.user;
     const friend_userid = +req.query["user-id"];
     const outgoing_action = req.query.action;
     await User.befriend({ outgoing_user_id, friend_userid, outgoing_action });
@@ -501,7 +421,6 @@ const userUnfriends = async (req, res) => {
     res.sendStatus(200);
 
     // call newsfeed generation service
-    // newsfeed.post(`/user/unfriend?outgoing-user-id=${outgoing_user_id}&friend-user-id=${friend_userid}`);
     newsfeed.post(`/user/unfriend`, {
         outgoing_user_id,
         friend_userid,
@@ -517,7 +436,6 @@ const userUnfriends = async (req, res) => {
 };
 
 // /user/follow?id=
-// POST
 const userFollows = async (req, res) => {
     const outgoing_user_id = req.user.id;
     const following_userid = +req.query.id;
@@ -531,7 +449,6 @@ const userFollows = async (req, res) => {
     });
 };
 
-// DELETE
 const userUnfollows = async (req, res) => {
     const outgoing_user_id = req.user.id;
     const following_userid = +req.query.id;
@@ -559,14 +476,6 @@ const getUserFollowers = async (req, res) => {
     res.send({ data: followers });
 };
 
-const dropFollowers = async (req, res) => {
-    const { type } = req.query;
-    const { user_id_to_drop } = req.body;
-    const user_id = req.user.id;
-    await User.dropFollowers({ user_id, type, user_id_to_drop });
-    res.sendStatus(200);
-};
-
 // /user/read?type=&post-id=
 const readPost = (req, res) => {
     const user_id = req.user.id;
@@ -586,79 +495,6 @@ const readPost = (req, res) => {
     }
 };
 
-const testGetNewsfeed = async (req, res) => {
-    const paging = +req.query.paging || 0;
-    const userAsking = req.params.user_id;
-    // initialization
-    if (!userTempNewsfeedStorage[userAsking] || paging === 0) {
-        userTempNewsfeedStorage[userAsking] = [];
-        await redisClient.set(
-            "NFGS_start_index_for_temp_storage_user_" + userAsking,
-            0
-        );
-    }
-
-    const requestedStartIndex = paging * NEWSFEED_PER_PAGE_FOR_CLIENT;
-    const requestedEndIndex =
-        paging * NEWSFEED_PER_PAGE_FOR_CLIENT +
-        NEWSFEED_PER_PAGE_FOR_CLIENT -
-        1;
-
-    let NFGSStartIndex = await redisClient.get(
-        "NFGS_start_index_for_temp_storage_user_" + userAsking
-    );
-    NFGSStartIndex = +NFGSStartIndex;
-    NFGSEndIndex = NFGSStartIndex + NEWSFEED_PER_PAGE_FOR_WEB_SERVER - 1;
-
-    // issue: localIndex could be negative
-    const localIndexToStart = requestedStartIndex - NFGSStartIndex;
-    const localIndexToEnd = requestedEndIndex - NFGSStartIndex;
-    let newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
-        localIndexToStart,
-        localIndexToEnd + 1
-    );
-
-    // not within range
-    if (localIndexToEnd <= 0 || newsfeedToReturn.length === 0) {
-        const { data } = await newsfeed.get(
-            `?user-id=${userAsking}&from=${requestedStartIndex}`
-        );
-
-        userTempNewsfeedStorage[userAsking] = data.data;
-        newsfeedToReturn = userTempNewsfeedStorage[userAsking].slice(
-            0,
-            NEWSFEED_PER_PAGE_FOR_CLIENT
-        );
-        redisClient.set(
-            "NFGS_start_index_for_temp_storage_user_" + userAsking,
-            requestedStartIndex
-        );
-    } else if (newsfeedToReturn.length === NEWSFEED_PER_PAGE_FOR_CLIENT) {
-    } else {
-        const { data } = await newsfeed.get(
-            `?user-id=${userAsking}&from=${requestedStartIndex}`
-        );
-
-        userTempNewsfeedStorage[userAsking] = data.data;
-        newsfeedToReturn = data.data.slice(0, NEWSFEED_PER_PAGE_FOR_CLIENT);
-        redisClient.set(
-            "NFGS_start_index_for_temp_storage_user_" + userAsking,
-            requestedStartIndex
-        );
-    }
-
-    // add author profile_pic_url and commentor
-    for (let i = 0; i < newsfeedToReturn.length; i++) {
-        const feedId = newsfeedToReturn[i].post_id;
-        const feedContent = await Feed.getFeedDetail(feedId, userAsking);
-        if (!feedContent) {
-            continue;
-        }
-        newsfeedToReturn[i] = feedContent;
-    }
-    res.send({ data: newsfeedToReturn });
-};
-
 module.exports = {
     userSignUp,
     userSignIn,
@@ -675,7 +511,5 @@ module.exports = {
     userUnfollows,
     getUserFollowings,
     getUserFollowers,
-    dropFollowers,
     readPost,
-    testGetNewsfeed,
 };

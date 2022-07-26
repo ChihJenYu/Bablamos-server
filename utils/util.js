@@ -1,7 +1,3 @@
-const multer = require("multer");
-
-const multerMiddleware = () => multer().any();
-
 const getValueOr = (table, keysArray, or) => {
     try {
         let value;
@@ -9,7 +5,7 @@ const getValueOr = (table, keysArray, or) => {
             value = table[key];
             table = table[key];
         }
-        return value || 0;
+        return value || or;
     } catch (e) {
         return or;
     }
@@ -22,7 +18,6 @@ const asyncErrorHandler = (fn) => {
 };
 
 module.exports = {
-    multerMiddleware,
     getValueOr,
     asyncErrorHandler,
 };

@@ -10,11 +10,7 @@ class Post extends Edge {
         id,
         user_id,
         content,
-        audience_type_id,
-        audience, // array of user_ids; optional
         shared_post_id, // optional
-        tags, // array
-        mentioned_users, // array; optional,
         photo_count, // default 0
         created_at, // optional
     }) {
@@ -23,14 +19,10 @@ class Post extends Edge {
             edge_type: "eventful_edge",
             user_id,
             content,
-            mentioned_users,
             photo_count,
             created_at,
         });
-        this.audience_type_id = audience_type_id;
-        this.audience = audience || [];
         this.shared_post_id = shared_post_id || null;
-        this.tags = tags || [];
     }
 
     static async getRandomPost({ favor_user, favor_recent }) {
@@ -88,71 +80,25 @@ class Post extends Edge {
             await conn.query("START TRANSACTION");
 
             if (this.id) {
-                const postTagsArray = this.tags.map((tag) => {
-                    return [this.id, tag.tag_id];
-                });
-                const postAudienceArray = this.audience.map((user_id) => {
-                    return [this.id, user_id];
-                });
-                const postMentionsArray = this.mentioned_users.map(
-                    (user_id) => {
-                        return [this.id, user_id];
-                    }
-                );
-
                 // is update
                 await conn.query(
-                    `UPDATE post SET content = ?, audience_type_id = ?, shared_post_id = ?, photo_count = ? WHERE id = ?`,
+                    `UPDATE post SET content = ?, shared_post_id = ?, photo_count = ? WHERE id = ?`,
                     [
                         this.content,
-                        this.audience_type_id,
                         this.shared_post_id,
                         this.photo_count,
                         this.id,
                     ]
                 );
-
-                // update post_tag
-                await conn.query("DELETE FROM post_tag WHERE post_id = ?", [
-                    this.id,
-                ]);
-                if (postTagsArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO post_tag (post_id, tag_id) VALUES ?",
-                        [postTagsArray]
-                    );
-                }
-                // update post_audience_list
-                await conn.query(
-                    "DELETE FROM post_audience_list WHERE post_id = ?",
-                    [this.id]
-                );
-                if (postAudienceArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
-                        [postAudienceArray]
-                    );
-                }
-                // update mention_user table
-                await conn.query("DELETE FROM mention_user WHERE post_id = ?", [
-                    this.id,
-                ]);
-                if (postMentionsArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO mention_user (post_id, user_id) VALUES ?",
-                        [postMentionsArray]
-                    );
-                }
             } else {
                 // is insert
                 const [{ insertId: post_id }] = await conn.query(
                     `INSERT INTO post
-                (user_id, content, audience_type_id, shared_post_id, photo_count)
-                VALUES (?, ?, ?, ?, ?)`,
+                (user_id, content, shared_post_id, photo_count)
+                VALUES (?, ?, ?, ?)`,
                     [
                         this.user_id,
                         this.content,
-                        this.audience_type_id,
                         this.shared_post_id,
                         this.photo_count,
                     ]
@@ -166,40 +112,6 @@ class Post extends Edge {
                 const { id, created_at } = newPostPacket[0];
                 this.id = id;
                 this.created_at = created_at;
-
-                const postTagsArray = this.tags.map((tag) => {
-                    return [this.id, tag.tag_id];
-                });
-                const postAudienceArray = this.audience.map((user_id) => {
-                    return [this.id, user_id];
-                });
-                const postMentionsArray = this.mentioned_users.map(
-                    (user_id) => {
-                        return [this.id, user_id];
-                    }
-                );
-
-                // insert into post_tag
-                if (postTagsArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO post_tag (post_id, tag_id) VALUES ?",
-                        [postTagsArray]
-                    );
-                }
-                // insert into post_audience_list
-                if (postAudienceArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO post_audience_list (post_id, user_id) VALUES ?",
-                        [postAudienceArray]
-                    );
-                }
-                // insert into mention_user table
-                if (postMentionsArray.length > 0) {
-                    await conn.query(
-                        "INSERT INTO mention_user (post_id, user_id) VALUES ?",
-                        [postMentionsArray]
-                    );
-                }
             }
             // commit transaction
             await conn.query("COMMIT");

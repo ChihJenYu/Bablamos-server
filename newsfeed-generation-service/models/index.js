@@ -1,6 +1,5 @@
-const db = require("../mysql");
+const db = require("../../mysql");
 const { getValueOr } = require("../../utils/util");
-// AFFINITY
 const {
     AFFINITY_MENTION_WEIGHT,
     AFFINITY_COMMENT_WEIGHT,
@@ -16,7 +15,6 @@ const {
     ALREADY_SEEN_BASE,
 } = process.env;
 
-// EDGE WEIGHT
 const ENV = "dev"; // in dev query from friendship instead of followship
 
 // getUserIds({type: "all"})
@@ -108,7 +106,7 @@ const generateUserLikesTable = async () => {
 const generateUserCommentsTable = async () => {
     const userCommentsTable = {};
     const [userComments] = await db.pool.query(
-        `select c.id, p.user_id as commentee_id, c.user_id as commentor_id, 1 as level
+        `select c.id, p.user_id as commentee_id, c.user_id as commentor_id
         from comment c
         join post p on c.post_id = p.id
         join user u on p.user_id = u.id

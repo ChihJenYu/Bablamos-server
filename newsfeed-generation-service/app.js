@@ -1,5 +1,5 @@
 const { initialization } = require("./utils/init");
-require("./mongoose/index");
+require("./mongoose/");
 const cors = require("cors");
 const express = require("express");
 const app = express();

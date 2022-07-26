@@ -30,8 +30,6 @@ const generateRandomPost = async () => {
         `${MY_HOST}/post`,
         {
             content: randomContent,
-            audience_type_id: 1,
-            tags: [],
             shared_post_id: sharedPostId,
         },
         {

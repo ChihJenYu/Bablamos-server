@@ -1,7 +1,7 @@
 const router = require("express").Router();
-const multer = require("multer");
 const { asyncErrorHandler } = require("../utils/util");
 const { authentication } = require("../middlewares/auth");
+const multerMiddleware = require("../middlewares/multer");
 const {
     userSignUp,
     userSignIn,
@@ -17,21 +17,11 @@ const {
     userFollows,
     userUnfollows,
     getUserFollowers,
-    dropFollowers,
     getUserFollowings,
     readPost,
-    testGetNewsfeed,
 } = require("../controllers/user-controller");
-// const { multerMiddleware } = require("../utils/util");
-// const { editUserInfo } = require("../../bablamos-client/src/apis/user");
 
-router
-    .route("/user/signup")
-    // .post([multerMiddleware("profile-pic"), asyncErrorHandler(userSignUp)]);
-    .post([
-        multer({ dest: null }).single("profile-pic"),
-        asyncErrorHandler(userSignUp),
-    ]);
+router.route("/user/signup").post([asyncErrorHandler(userSignUp)]);
 
 router.route("/user/signin").post(asyncErrorHandler(userSignIn));
 
@@ -43,17 +33,12 @@ router
     .route("/user/newsfeed")
     .get([authentication, asyncErrorHandler(getNewsfeed)]);
 
-router.route("/user/newsfeed-test/:user_id").get(asyncErrorHandler(testGetNewsfeed));
-
 router
     .route("/user/info")
     .get([authentication, asyncErrorHandler(getUserInfo)])
     .patch([
         authentication,
-        multer({ dest: null }).fields([
-            { name: "cover-pic" },
-            { name: "profile-pic" },
-        ]),
+        multerMiddleware,
         asyncErrorHandler(editUserProfile),
     ]);
 
@@ -80,10 +65,7 @@ router
 
 router.route("/user/following").get(asyncErrorHandler(getUserFollowings)); // id, paging
 
-router
-    .route("/user/follower")
-    .get(asyncErrorHandler(getUserFollowers)) // id, paging
-    .delete([authentication, asyncErrorHandler(dropFollowers)]); // type, req.body: {user_id_to_drop: []}
+router.route("/user/follower").get(asyncErrorHandler(getUserFollowers)); // id, paging
 
 router.route("/user/read").post([authentication, readPost]);
 

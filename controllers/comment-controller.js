@@ -8,16 +8,11 @@ const {
 } = require("../mq/");
 const createComment = async (req, res) => {
     const post_id = req.query["post-id"];
-    const user_id = req.user.id;
-    // request body:
-    // {
-    //     content: "lorem ipsum",
-    //     level: 1,
-    //     replied_comment_id: undefined,
-    //     mentioned_users: [1, 2, 3],
-    // }
-    const photo_count = req.files ? req.files.length : 0;
+    const { id: user_id } = req.user;
+    const photo_count = req.files?.length || 0;
     const commentData = req.body;
+
+    // save new comment to db
     const newComment = new Comment({
         ...commentData,
         post_id,
@@ -33,13 +28,15 @@ const createComment = async (req, res) => {
         photo_count: newComment.photo_count,
         created_at: newComment.created_at,
     });
+
+    // push popularity recalculation job
     popularityCalculatorJobQueue.add({
         function: "checkPopCount",
         post_id: "" + post_id,
         type: "comment",
     });
 
-    // get for_user_id from post_id
+    // push notification to post author
     const [{ user_id: for_user_id }] = await Post.find(["user_id"], {
         id: post_id,
     });
@@ -51,6 +48,8 @@ const createComment = async (req, res) => {
         comment_id: newComment.id,
         for_user_id,
     });
+
+    // push notifications to mentioned users
     commentData.mentioned_users.forEach((userId) => {
         if (userId === for_user_id) {
             return;
@@ -68,17 +67,9 @@ const createComment = async (req, res) => {
 
 const editComment = async (req, res) => {
     const photo_count = req.files.length;
-    const comment_id = req.comment_id;
-    const user_id = req.user.id;
-    // request query: comment-id
-    // request body:
-    // {
-    //     content: "lorem ipsum",
-    //     created_at,
-    //     mentioned_users: [1, 2, 3],
-    // }
+    const { comment_id } = req;
+    const { id: user_id } = req.user;
     const commentData = req.body;
-
     const newComment = new Comment({
         ...commentData,
         user_id,
@@ -98,7 +89,7 @@ const editComment = async (req, res) => {
 };
 
 const deleteComment = async (req, res) => {
-    const comment_id = req.comment_id;
+    const { comment_id } = req;
     const { post_id } = await Comment.delete(comment_id);
     res.status(200).send({ id: comment_id });
     popularityCalculatorJobQueue.add({
@@ -106,15 +97,12 @@ const deleteComment = async (req, res) => {
         post_id: "" + post_id,
         type: "comment",
     });
-    const [{ user_id: for_user_id }] = await Post.find(["user_id"], {
-        id: post_id,
-    });
 };
 
 const getComments = async (req, res) => {
     const post_id = req.query["post-id"];
     const paging = +req.query.paging || 0;
-    const user_id = req.user.id;
+    const { id: user_id } = req.user;
     const comments = await Comment.getComments({
         post_id,
         paging,
@@ -132,9 +120,8 @@ const getComments = async (req, res) => {
         };
     });
 
-    let next_paging;
     if (comments.length > COMMENT_PAGE_SIZE) {
-        next_paging = paging + 1;
+        const next_paging = paging + 1;
         res.send({
             data: {
                 comments: commentsToReturn.slice(0, comments.length - 1),
