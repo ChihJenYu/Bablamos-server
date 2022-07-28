@@ -1,5 +1,7 @@
 # bablamos.com
 
+*For client-side repo, check out [Bablamos-client](https://github.com/ChihJenYu/Bablamos-client)*
+
 [bablamos.com](https://bablamos.com) is a social networking platform that prioritizes what you want to see.
 
 ## Table of Contents
