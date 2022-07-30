@@ -351,10 +351,6 @@ class Feed extends Post {
                 ? [post_ids, post_ids, post_ids, user_asking]
                 : [post_ids, post_ids, post_ids]
         );
-        if (allFeeds.length === 0) {
-            return null;
-        }
-
         const newsfeedToReturn = [];
         for (let feed of allFeeds) {
             const feedDetail = await Feed.attachFeedAddData(feed, user_asking);

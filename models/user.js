@@ -136,8 +136,8 @@ class User {
                 }
             );
             return { token, expire: JWT_EXPIRE };
-        } catch (e) {
-            console.log(e);
+        } catch (error) {
+            console.log(error);
             throw new Error("Could not generate token");
         }
     }
@@ -180,7 +180,6 @@ class User {
             ];
             for (let col of Object.keys(update)) {
                 if (!ALLOWED_UPDATE_COLS.includes(col)) {
-                    console.log(col);
                     throw new Error("Invalid update argument");
                 }
             }

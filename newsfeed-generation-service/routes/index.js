@@ -1,5 +1,4 @@
 const router = require("express").Router();
-const redisClient = require("../redis");
 const { asyncErrorHandler } = require("../../utils/util");
 const {
     createUser,
