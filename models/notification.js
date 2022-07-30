@@ -154,9 +154,9 @@ class Notification {
                 );
                 await conn.query("COMMIT");
                 return true;
-            } catch (e) {
+            } catch (error) {
                 await conn.query("ROLLBACK");
-                console.log(e);
+                console.log(error);
                 return false;
             } finally {
                 await conn.release();
@@ -173,9 +173,9 @@ class Notification {
                 );
                 await conn.query("COMMIT");
                 return [];
-            } catch (e) {
+            } catch (error) {
                 await conn.query("ROLLBACK");
-                console.log(e);
+                console.log(error);
                 return false;
             } finally {
                 await conn.release();
@@ -187,9 +187,9 @@ class Notification {
                 `DELETE FROM notification WHERE updated_at < NOW() - INTERVAL 24 hour AND read_by_user = ?`, [read_by_user]);
             await conn.query("COMMIT");
             return true;
-        } catch (e) {
+        } catch (error) {
             await conn.query("ROLLBACK");
-            console.log(e);
+            console.log(error);
             return false;
         } finally {
             await conn.release();

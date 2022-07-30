@@ -9,7 +9,7 @@ app.use("/api", require("./routes"));
 
 if (process.argv.indexOf("init") != -1) {
     initialization().then(() => {
-        console.log("News feed generation service initialization complete.");
+        console.log("Newsfeed generation service initialization complete.");
     });
 }
 

@@ -114,30 +114,6 @@ const sortNewsfeed = {
     },
 };
 
-// type: ["updateOne", "updateMany"]
-// cond: { user_id: 2 }
-// pipelines: [{ $set: ... }, { ... }]
-// const recalculateEdgeRankScore = async ({ method, cond, pipelines }) => {
-//     if (method === "updateOne") {
-//         await User.updateOne(cond, pipelines);
-//     } else {
-//         await User.updateMany(cond, pipelines);
-//     }
-// };
-
-// const sortNewsfeed = async () => {
-//     await User.updateMany({
-//         $push: {
-//             newsfeed: {
-//                 $each: [],
-//                 $sort: {
-//                     edge_rank_score: -1,
-//                 },
-//             },
-//         },
-//     });
-// };
-
 // update user's affinity list and score in each newsfeed item
 const recalcAffinityTable = async () => {
     console.log("Begin job: recalculating user affinity table");
@@ -275,7 +251,6 @@ const recalcAffinityTable = async () => {
 
 const recalcTimeDecayFactor = async ({ type }) => {
     const beginTime = Date.now();
-    console.log("Begin job: recalculating time decay factor");
     let updates = [];
     if (type === 1) {
         updates.push({
@@ -369,145 +344,14 @@ const recalcTimeDecayFactor = async ({ type }) => {
     });
     await User.bulkWrite(updates);
     console.log(
-        `Total time elapsed: ${
+        `Recalculating time decay factor took: ${
             Date.now() - beginTime
         }ms\n-----------------------------------------`
     );
 };
 
-// type 1 (per 5m) & 2 (per 24 hour)
-// const recalcTimeDecayFactor = async ({ type }) => {
-//     const beginTime = Date.now();
-//     console.log("Begin job: recalculating time decay factor");
-//     let updates;
-//     if (type === 1) {
-//         const updateOneHour = User.updateMany(
-//             {},
-//             {
-//                 $set: {
-//                     "newsfeed.$[el].time_decay_factor": +ONE_HOUR_TIME_DECAY,
-//                 },
-//             },
-//             {
-//                 arrayFilters: [
-//                     {
-//                         "el.created_at": {
-//                             $lte: Date.now() / 1000 - 60 * 10,
-//                             $gte: Date.now() / 1000 - 60 * 60,
-//                         },
-//                     },
-//                 ],
-//             }
-//         );
-//         const updateSixHours = User.updateMany(
-//             {},
-//             {
-//                 $set: {
-//                     "newsfeed.$[el].time_decay_factor": +SIX_HOUR_TIME_DECAY,
-//                 },
-//             },
-//             {
-//                 arrayFilters: [
-//                     {
-//                         "el.created_at": {
-//                             $lte: Date.now() / 1000 - 60 * 60 * 1,
-//                             $gte: Date.now() / 1000 - 60 * 60 * 6,
-//                         },
-//                     },
-//                 ],
-//             }
-//         );
-//         const updateTwentyFourHours = User.updateMany(
-//             {},
-//             {
-//                 $set: {
-//                     "newsfeed.$[el].time_decay_factor": +ONE_DAY_TIME_DECAY,
-//                 },
-//             },
-//             {
-//                 arrayFilters: [
-//                     {
-//                         "el.created_at": {
-//                             $lte: Date.now() / 1000 - 60 * 60 * 6,
-//                             $gte: Date.now() / 1000 - 60 * 60 * 24,
-//                         },
-//                     },
-//                 ],
-//             }
-//         );
-//         const updateOneDay = User.updateMany(
-//             {},
-//             {
-//                 $set: {
-//                     "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
-//                 },
-//             },
-//             {
-//                 arrayFilters: [
-//                     {
-//                         "el.created_at": {
-//                             $lte: Date.now() / 1000 - 60 * 60 * 24,
-//                         },
-//                         "el.time_decay_factor": {
-//                             $lt: +DAYS_BASE,
-//                         },
-//                     },
-//                 ],
-//             }
-//         );
-//         updates = [
-//             updateOneHour,
-//             updateSixHours,
-//             updateTwentyFourHours,
-//             updateOneDay,
-//         ];
-//     } else {
-//         updates = [
-//             User.updateMany(
-//                 {},
-//                 {
-//                     $mul: {
-//                         "newsfeed.$[el].time_decay_factor": +DAYS_BASE,
-//                     },
-//                 },
-//                 {
-//                     arrayFilters: [
-//                         {
-//                             "el.created_at": {
-//                                 $lte: Date.now() / 1000 - 60 * 60 * 24,
-//                             },
-//                             "el.time_decay_factor": {
-//                                 $gte: +DAYS_BASE,
-//                             },
-//                         },
-//                     ],
-//                 }
-//             ),
-//         ];
-//     }
-//     Promise.allSettled(updates)
-//         .then(() =>
-//             recalculateEdgeRankScore({
-//                 method: "updateMany",
-//                 cond: {},
-//                 pipelines: [updateEdgeRankScore],
-//             })
-//         )
-//         .then(() => sortNewsfeed())
-//         .then(() =>
-//             console.log(
-//                 `Total time elapsed: ${
-//                     Date.now() - beginTime
-//                 }ms\n-----------------------------------------`
-//             )
-//         );
-// };
-
 // type: ["like", "comment", "share"]
 const checkPopCount = async ({ post_id, type }) => {
-    console.log(
-        `Begin job: recalculating popularity and edge rank score for post #${post_id}`
-    );
     const beginTime = Date.now();
     const data = await Feed.getPopularity({
         post_id,
@@ -528,7 +372,6 @@ const checkPopCount = async ({ post_id, type }) => {
     if (type == "like") {
         pop_count = data.like_count;
         if (pop_count % 10 !== 0 || pop_count === 0) {
-            console.log(`Does not warrant popularity calculation; exiting...`);
             return;
         }
         newPopSubScore = calculateLikeScore(data.like_count);
@@ -550,7 +393,6 @@ const checkPopCount = async ({ post_id, type }) => {
     } else if (type == "comment") {
         pop_count = data.comment_count;
         if (pop_count % 7 !== 0 || pop_count === 0) {
-            console.log(`Does not warrant popularity calculation; exiting...`);
             return;
         }
         newPopSubScore = calculateCommentScore(data.comment_count);
@@ -572,7 +414,6 @@ const checkPopCount = async ({ post_id, type }) => {
     } else {
         pop_count = data.share_count;
         if (pop_count % 5 !== 0 || pop_count === 0) {
-            console.log(`Does not warrant popularity calculation; exiting...`);
             return;
         }
         newPopSubScore = calculateShareScore(data.share_count);
@@ -620,11 +461,6 @@ const checkPopCount = async ({ post_id, type }) => {
         }ms for ${allFollowerIds.length} users (${
             (postEndTime - postBeginTime) / allFollowerIds.length.length
         }ms per user)`
-    );
-    console.log(
-        `Total time elapsed: ${
-            Date.now() - beginTime
-        }ms\n-----------------------------------------`
     );
 };
 

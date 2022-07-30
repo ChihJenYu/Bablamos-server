@@ -42,7 +42,6 @@ const createPost = async (req, res) => {
     }
 
     // publish notification to followers
-    console.log("Calling notification service...");
     notificationDispatcherJobQueue.add({
         function: "pushNotification",
         type: 1,
@@ -88,7 +87,6 @@ const deletePost = async (req, res) => {
         });
     }
 
-    console.log("Calling notification service...");
     notificationDispatcherJobQueue.add({
         function: "invalidateNotification",
         post_id: deletedPost.id,
@@ -96,11 +94,10 @@ const deletePost = async (req, res) => {
     });
 
     // delete post from elastic search
-    console.log("Calling elastic server...");
     try {
         search.delete(`/${ELASTIC_POST_INDEX}/_doc/${deletedPost.id}`);
-    } catch (e) {
-        console.log(e);
+    } catch (error) {
+        console.log(error);
     }
 };
 

@@ -15,13 +15,8 @@ const createUser = async (req, res) => {
             affinity_with_self: [],
         });
         await newUser.save();
-        console.log(
-            `Insertion of user #${userId} complete; took ${
-                Date.now() - timestampStart
-            }ms`
-        );
-    } catch (e) {
-        console.log(e);
+    } catch (error) {
+        console.log(error);
     }
 };
 
@@ -44,8 +39,8 @@ const removeUserFromNewsfeed = async (req, res) => {
                 Date.now() - timestampStart
             }ms`
         );
-    } catch (e) {
-        console.log(e);
+    } catch (error) {
+        console.log(error);
     }
 };
 
@@ -190,7 +185,6 @@ const recalcNewsfeed = async (req, res) => {
     const userId = +req.query["user-id"];
     const timestampStart = Date.now();
     const readPostIds = req.body.posts;
-    console.log("Read posts: ", readPostIds);
     // increment view counts in Mongo
     if (readPostIds.length === 0) {
         res.sendStatus(200);
@@ -240,9 +234,6 @@ const recalcNewsfeed = async (req, res) => {
     });
     await User.bulkWrite(updates);
 
-    console.log(
-        `View count update complete; took ${Date.now() - timestampStart}ms`
-    );
     res.sendStatus(200);
 };
 
